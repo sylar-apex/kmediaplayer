@@ -43,7 +43,15 @@ kotlin {
             implementation(libs.media3.exoplayerHls)
             implementation(libs.media3.exoplayerDash)
             api(libs.media3.session)
+            implementation(libs.media3.ffmpeg)
+            implementation(libs.libvlc.android)
             implementation(libs.androidx.core.ktx)
+        }
+        val desktopMain by getting {
+            dependencies { implementation(libs.vlcj) }
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.kotlinx.browser)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

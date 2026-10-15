@@ -23,6 +23,8 @@ interface PlayerWindow {
     fun openStorePage(): Boolean
     /** Lets the user pick a file; [onPicked] receives its URI and display name. */
     fun pickFile(mimeTypes: List<String>, onPicked: (uri: String, name: String) -> Unit)
+    /** Asks the OS for broad file access, then retries playback. False when the platform has no such permission. */
+    fun requestFileAccess(): Boolean = false
 
     @Composable
     fun VideoSurface(modifier: Modifier)

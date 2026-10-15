@@ -13,7 +13,10 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Rational
-import android.view.TextureView
+import android.os.Handler
+import android.os.Looper
+import android.view.PixelCopy
+import android.view.SurfaceView
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -36,6 +39,7 @@ import org.app.kmediaplayer.KMediaPlayer
 import org.app.kmediaplayer.PendingPlayback
 import org.app.kmediaplayer.android.KMediaPlayerAndroid
 import org.app.kmediaplayer.android.Media3Engine
+import org.app.kmediaplayer.android.hybrid.HybridEngine
 import org.app.kmediaplayer.engine.EngineListener
 import org.app.kmediaplayer.model.MediaFile
 import org.app.kmediaplayer.platform.PlatformMedia
@@ -60,7 +64,9 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
         private set
     override val pxPerCm: Float get() = resources.displayMetrics.xdpi / 2.54f
 
-    private var textureView: TextureView? = null
+    private var surfaceView: SurfaceView? = null
+    private var videoDisplayOn = true
+    private var awaitingFileAccess = false
     private var session: MediaSession? = null
     private var lastBackAt = 0L
     private var closing = false
@@ -74,7 +80,7 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
         val engine = KMediaPlayer.engine
         state = VideoPlayerState(engine, lifecycleScope)
         if (!handleIntent(intent)) { finish(); return }
-        session = runCatching { MediaSession.Builder(this, Media3Engine.exo).setId("video").build() }.getOrNull()
+        session = runCatching { MediaSession.Builder(this, HybridEngine.sessionPlayer).setId("video").build() }.getOrNull()
         engine.addListener(windowListener)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -218,15 +224,33 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
         if (isInPictureInPictureMode) return
         val audioOnly = state.videoW == 0 && settings[PlayerKeys.backgroundAudio]
         if ((state.backgroundPlay || audioOnly) && state.engine.playWhenReady) {
-            Media3Engine.exo.clearVideoSurface()
+            HybridEngine.setVideoEnabled(false)
             PlatformMedia.startBackgroundPlayback()
         } else state.engine.pause()
+    }
+
+    override fun requestFileAccess(): Boolean {
+        if (Build.VERSION.SDK_INT < 30) return false
+        awaitingFileAccess = true
+        return runCatching {
+            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+        }.recoverCatching {
+            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+        }.isSuccess
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (awaitingFileAccess && Build.VERSION.SDK_INT >= 30) {
+            awaitingFileAccess = false
+            if (Environment.isExternalStorageManager()) { state.engine.prepare(); state.engine.play() } else close()
+        }
     }
 
     override fun onStart() {
         super.onStart()
         PlatformMedia.stopBackgroundPlayback()
-        textureView?.let { Media3Engine.exo.setVideoTextureView(it) }
+        HybridEngine.setVideoEnabled(videoDisplayOn)
     }
 
     override fun close() {
@@ -251,7 +275,14 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
     }
 
     override fun screenshot() {
-        val bmp: Bitmap = textureView?.bitmap ?: run { state.toast = "Screenshot unavailable"; return }
+        val view = surfaceView?.takeIf { it.width > 0 && it.height > 0 } ?: run { state.toast = "Screenshot unavailable"; return }
+        val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        PixelCopy.request(view, bmp, { result ->
+            if (result == PixelCopy.SUCCESS) saveScreenshot(bmp) else state.toast = "Screenshot failed"
+        }, Handler(Looper.getMainLooper()))
+    }
+
+    private fun saveScreenshot(bmp: Bitmap) {
         val name = "MaxPlayerPro_${System.currentTimeMillis()}.png"
         val ok = runCatching {
             val values = ContentValues().apply {
@@ -266,7 +297,8 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
     }
 
     override fun setVideoDisplay(on: Boolean) {
-        if (!on) Media3Engine.exo.clearVideoSurface() else textureView?.let { Media3Engine.exo.setVideoTextureView(it) }
+        videoDisplayOn = on
+        HybridEngine.setVideoEnabled(on)
     }
 
     override fun openStorePage(): Boolean =
@@ -286,11 +318,19 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
 
     @Composable
     override fun VideoSurface(modifier: Modifier) {
+        // SurfaceView, not TextureView: frames go straight to the display compositor (a hardware
+        // overlay where available) instead of through the app's UI thread and GPU on every frame.
         AndroidView(
-            factory = { ctx -> TextureView(ctx).also { tv -> textureView = tv; Media3Engine.exo.setVideoTextureView(tv) } },
+            factory = { ctx ->
+                SurfaceView(ctx).also { sv ->
+                    surfaceView = sv
+                    sv.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> HybridEngine.onSurfaceSizeChanged(v.width, v.height) }
+                    HybridEngine.attachSurface(sv)
+                }
+            },
             modifier = modifier,
         )
-        DisposableEffect(Unit) { onDispose { textureView?.let { Media3Engine.exo.clearVideoTextureView(it) } } }
+        DisposableEffect(Unit) { onDispose { surfaceView?.let(HybridEngine::detachSurface); surfaceView = null } }
     }
 
     private val windowListener = object : EngineListener {

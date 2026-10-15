@@ -9,7 +9,7 @@ import android.os.BatteryManager
 import android.provider.OpenableColumns
 import android.widget.Toast
 import org.app.kmediaplayer.android.KMediaPlayerAndroid
-import org.app.kmediaplayer.android.Media3Engine
+import org.app.kmediaplayer.android.hybrid.HybridEngine
 import org.app.kmediaplayer.android.PlaybackService
 import org.app.kmediaplayer.engine.MediaEngine
 import org.app.kmediaplayer.model.MediaFile
@@ -22,7 +22,7 @@ actual object PlatformMedia {
     private val context: Context get() = KMediaPlayerAndroid.context
     private val audioManager: AudioManager get() = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    actual fun engine(): MediaEngine = Media3Engine
+    actual fun engine(): MediaEngine = HybridEngine
 
     actual fun systemVolume(): Int = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
     actual fun systemMaxVolume(): Int = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)

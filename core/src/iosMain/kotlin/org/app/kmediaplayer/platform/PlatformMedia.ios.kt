@@ -1,16 +1,15 @@
 package org.app.kmediaplayer.platform
 
 import org.app.kmediaplayer.engine.MediaEngine
-import org.app.kmediaplayer.engine.QueueEngine
+import org.app.kmediaplayer.ios.IosPlayback
 import org.app.kmediaplayer.model.MediaFile
 import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
 
 actual object PlatformMedia {
-    private val engine by lazy { QueueEngine() }
     private var volume = 15
 
-    actual fun engine(): MediaEngine = engine
+    actual fun engine(): MediaEngine = IosPlayback.engine
 
     actual fun systemVolume(): Int = volume
     actual fun systemMaxVolume(): Int = 15

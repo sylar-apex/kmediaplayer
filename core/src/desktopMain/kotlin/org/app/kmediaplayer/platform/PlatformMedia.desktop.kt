@@ -1,7 +1,7 @@
 package org.app.kmediaplayer.platform
 
 import org.app.kmediaplayer.engine.MediaEngine
-import org.app.kmediaplayer.engine.QueueEngine
+import org.app.kmediaplayer.desktop.DesktopPlayback
 import org.app.kmediaplayer.model.MediaFile
 import java.awt.Desktop
 import java.io.File
@@ -12,10 +12,9 @@ import java.util.Date
 import java.util.Locale
 
 actual object PlatformMedia {
-    private val engine by lazy { QueueEngine() }
     private var volume = 15
 
-    actual fun engine(): MediaEngine = engine
+    actual fun engine(): MediaEngine = DesktopPlayback.engine
 
     actual fun systemVolume(): Int = volume
     actual fun systemMaxVolume(): Int = 15

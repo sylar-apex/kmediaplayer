@@ -212,7 +212,7 @@ fun VideoPlayerScreen(window: PlayerWindow) {
             )
         }
         st.error?.let { err ->
-            PlayerDialog(
+            if (err.needsFileAccess) FileAccessDialog(window) else PlayerDialog(
                 onDismissRequest = { st.error = null },
                 text = { Text("Can't play this media.\n${err.codeName}") },
                 confirmButton = { TextButton({ st.error = null; if (st.engine.hasNext()) st.next() else window.close() }) { Text("OK") } },
@@ -220,6 +220,18 @@ fun VideoPlayerScreen(window: PlayerWindow) {
             )
         }
     }
+}
+
+/** Shown when the OS blocks reading the file, typically a type the media scanner does not know. */
+@Composable
+private fun FileAccessDialog(window: PlayerWindow) {
+    val st = window.state
+    PlayerDialog(
+        onDismissRequest = { st.error = null },
+        text = { Text("This file type needs \"All files access\". Allow it so Max Player can open every video format on your device.") },
+        confirmButton = { TextButton({ st.error = null; if (!window.requestFileAccess()) window.close() }) { Text("ALLOW") } },
+        dismissButton = { TextButton({ st.error = null; window.close() }) { Text("CANCEL") } },
+    )
 }
 
 @Composable

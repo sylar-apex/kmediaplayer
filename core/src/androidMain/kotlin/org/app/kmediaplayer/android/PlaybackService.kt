@@ -6,6 +6,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import org.app.kmediaplayer.KMediaPlayer
+import org.app.kmediaplayer.android.hybrid.HybridEngine
 import org.app.kmediaplayer.settings.PlayerKeys
 
 /**
@@ -18,7 +19,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         KMediaPlayerAndroid.init(this)
-        val player = Media3Engine.exo
+        val player = HybridEngine.sessionPlayer
         val target = if (KMediaPlayer.isMusicSession.value) KMediaPlayerAndroid.musicActivity else KMediaPlayerAndroid.videoActivity
         val builder = MediaSession.Builder(this, player)
             .setCallback(object : MediaSession.Callback {

@@ -1,14 +1,13 @@
 package org.app.kmediaplayer.platform
 
 import org.app.kmediaplayer.engine.MediaEngine
-import org.app.kmediaplayer.engine.QueueEngine
+import org.app.kmediaplayer.web.WebPlayback
 import org.app.kmediaplayer.model.MediaFile
 
 actual object PlatformMedia {
-    private val engine by lazy { QueueEngine() }
     private var volume = 15
 
-    actual fun engine(): MediaEngine = engine
+    actual fun engine(): MediaEngine = WebPlayback.engine
 
     actual fun systemVolume(): Int = volume
     actual fun systemMaxVolume(): Int = 15

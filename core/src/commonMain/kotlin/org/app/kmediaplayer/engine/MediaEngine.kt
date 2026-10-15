@@ -33,6 +33,13 @@ data class FormatInfo(
 data class EngineError(val codeName: String) {
     /** Source/network failures, where switching decoder cannot help. */
     val isIo: Boolean get() = "_IO_" in codeName
+
+    /** The OS blocked reading the file; on Android this needs "All files access". */
+    val needsFileAccess: Boolean get() = codeName == NO_FILE_ACCESS
+
+    companion object {
+        const val NO_FILE_ACCESS = "ERROR_CODE_IO_NO_PERMISSION"
+    }
 }
 
 /** Callbacks from a [MediaEngine]; override only what you need. */
