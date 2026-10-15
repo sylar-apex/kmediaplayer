@@ -5,10 +5,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 import uk.co.caprica.vlcj.media.Media
 import uk.co.caprica.vlcj.media.MediaEventAdapter
 import uk.co.caprica.vlcj.media.MediaParsedStatus
+import uk.co.caprica.vlcj.media.Meta
 import uk.co.caprica.vlcj.media.ParseFlag
 
-/** What libVLC reads from a file's header: length, picture size and frame rate. */
-data class ProbedInfo(val durationMs: Long, val width: Int, val height: Int, val frameRate: Float)
+/** What libVLC reads from a file's header: length, picture size, frame rate and (audio) tags. */
+data class ProbedInfo(
+    val durationMs: Long, val width: Int, val height: Int, val frameRate: Float,
+    val artist: String = "", val album: String = "",
+)
 
 /** Reads media headers with libVLC's parser, without decoding or playing anything. */
 object VlcMediaProbe {
@@ -30,7 +34,10 @@ object VlcMediaProbe {
             val fps = video?.takeIf { it.frameRateBase() > 0 }?.let { it.frameRate().toFloat() / it.frameRateBase() } ?: 0f
             val sar = video?.takeIf { it.sampleAspectRatioBase() > 0 && it.sampleAspectRatio() > 0 }
                 ?.let { it.sampleAspectRatio().toFloat() / it.sampleAspectRatioBase() } ?: 1f
-            ProbedInfo(media.info().duration().coerceAtLeast(0), ((video?.width() ?: 0) * sar).toInt(), video?.height() ?: 0, fps)
+            ProbedInfo(
+                media.info().duration().coerceAtLeast(0), ((video?.width() ?: 0) * sar).toInt(), video?.height() ?: 0, fps,
+                artist = media.meta().get(Meta.ARTIST).orEmpty().trim(), album = media.meta().get(Meta.ALBUM).orEmpty().trim(),
+            )
         } finally {
             media.release()
         }
