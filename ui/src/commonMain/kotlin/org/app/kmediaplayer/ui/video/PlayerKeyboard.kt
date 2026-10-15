@@ -10,8 +10,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import org.app.kmediaplayer.KMediaPlayer
 import org.app.kmediaplayer.settings.PlayerKeys
-import org.app.kmediaplayer.ui.resources.Res
-import org.app.kmediaplayer.ui.resources.ic_pl_ff
 import org.app.kmediaplayer.util.formatDecimal
 
 /**
@@ -23,6 +21,7 @@ import org.app.kmediaplayer.util.formatDecimal
  * | ← / → | back / forward by the "Move interval" setting (Shift: 1 minute) |
  * | J / L | back / forward 10 s |
  * | ↑ / ↓ | volume up / down |
+ * | Cmd/Ctrl + ↑ / ↓ | brightness up / down |
  * | M | mute |
  * | F | full screen |
  * | Esc | close panel, leave full screen |
@@ -38,6 +37,9 @@ internal object PlayerKeyboard {
     private const val LONG_SEEK_MS = 60_000L
     private const val SHORT_SEEK_MS = 10_000L
     private const val SPEED_STEP = 0.25f
+    /** Brightness runs 0..30 like the swipe gesture; 2 steps per key press. */
+    private const val BRIGHTNESS_STEP = 2
+    private const val BRIGHTNESS_MAX = 30
 
     /** Handles [event] for [window]; true when the key was a player shortcut. */
     fun handle(event: KeyEvent, window: PlayerWindow): Boolean {
@@ -51,8 +53,8 @@ internal object PlayerKeyboard {
             Key.DirectionRight -> { seek(st, if (event.isShiftPressed) LONG_SEEK_MS else moveMs()); true }
             Key.J -> { seek(st, -SHORT_SEEK_MS); true }
             Key.L -> { seek(st, SHORT_SEEK_MS); true }
-            Key.DirectionUp -> { volume(st, +1); true }
-            Key.DirectionDown -> { volume(st, -1); true }
+            Key.DirectionUp -> { if (command) brightness(window, +BRIGHTNESS_STEP) else volume(st, +1); true }
+            Key.DirectionDown -> { if (command) brightness(window, -BRIGHTNESS_STEP) else volume(st, -1); true }
             Key.M -> { st.toggleMute(); true }
             Key.F -> { if (!PlatformVideoTools.toggleFullscreen()) st.toast = "Full screen is not available here"; true }
             Key.Escape -> when {
@@ -88,10 +90,19 @@ internal object PlayerKeyboard {
         st.levelOsd = LevelOsd(false, v.percent, v.level.toFloat() / v.maxLevel.coerceAtLeast(1), if (v.boostEnabled) 0.5f else null)
     }
 
+    private fun brightness(window: PlayerWindow, delta: Int) {
+        val st = window.state
+        val level = (st.brightness + delta).coerceIn(0, BRIGHTNESS_MAX)
+        st.brightness = level
+        window.setBrightness(level)
+        KMediaPlayer.settings[PlayerKeys.brightnessLevel] = level
+        st.levelOsd = LevelOsd(true, level, level / BRIGHTNESS_MAX.toFloat(), null)
+    }
+
     private fun speed(st: VideoPlayerState, value: Float) {
         val v = value.coerceIn(0.25f, 4f)
         st.setSpeed(v)
-        st.pillOsd = Res.drawable.ic_pl_ff to "${formatDecimal(v, 2)}X"
+        st.toast = "Speed ${formatDecimal(v, 2)}X"
     }
 
     private fun digit(key: Key): Long? = listOf(Key.Zero, Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine)

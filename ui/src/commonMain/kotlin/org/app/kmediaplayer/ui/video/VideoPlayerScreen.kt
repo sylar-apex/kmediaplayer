@@ -161,6 +161,9 @@ private fun VideoPlayerContent(window: PlayerWindow) {
     LaunchedEffect(st.panel) { if (st.panel == Panel.None) st.scheduleHide() }
     LaunchedEffect(st.snack) { if (st.snack != null) { delay(3000); st.snack = null } }
     LaunchedEffect(st.toast) { if (st.toast != null) { delay(1500); st.toast = null } }
+    // Level and seek badges hide shortly after their last change, whether a gesture or a key set them.
+    LaunchedEffect(st.levelOsd) { if (st.levelOsd != null) { delay(1500); st.levelOsd = null } }
+    LaunchedEffect(st.tapSeekOsd) { if (st.tapSeekOsd != null) { delay(1500); st.tapSeekOsd = null } }
     // Messages from platform code (desktop, web) shown like the player's own toasts.
     LaunchedEffect(Unit) { KMediaPlayer.notices.collect { msg -> if (msg != null) { st.toast = msg; KMediaPlayer.notices.value = null } } }
     LaunchedEffect(st.videoW, st.videoH) { if (st.landscape == null) window.applyOrientation() }

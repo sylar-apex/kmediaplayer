@@ -57,11 +57,20 @@ class WebVideoBackend : PlaybackBackend {
 
     init { listen() }
 
+    /** The library ID of the item loaded now (a stable `webfs://` ID for local files). */
+    var currentId: String? = null
+        private set
+
     override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder) {
         this.playWhenReady = playWhenReady
         pendingSeekMs = startMs
+        currentId = uri
         setState(EngineState.Buffering)
-        video.src = uri
+        if (WebFiles.isLocal(uri) && !WebFiles.isAvailable(uri)) {
+            setState(EngineState.Idle)
+            return callback?.onError("ERROR_CODE_IO_FILE_NOT_FOUND") ?: Unit
+        }
+        video.src = WebFiles.resolve(uri)
         video.playbackRate = speed.toDouble()
         video.load()
     }
@@ -78,6 +87,7 @@ class WebVideoBackend : PlaybackBackend {
 
     override fun stop() {
         playWhenReady = false
+        currentId = null
         video.pause()
         video.removeAttribute("src")
         video.load()
