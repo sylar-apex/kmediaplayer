@@ -7,6 +7,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asComposeImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -40,10 +42,14 @@ private fun DrawScope.drawFrame(frames: VideoFrameBuffer, bitmap: Bitmap) {
         bitmap.installPixels(pixels)
     } ?: false
     if (!ready) return
+    val b = PlatformVideoTools.brightness
     drawImage(
         bitmap.asComposeImageBitmap(),
         srcOffset = IntOffset.Zero, srcSize = IntSize(bitmap.width, bitmap.height),
         dstOffset = IntOffset.Zero, dstSize = IntSize(size.width.toInt(), size.height.toInt()),
         filterQuality = FilterQuality.Low,
+        colorFilter = if (b == 1f) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToScale(b, b, b, 1f) }),
     )
 }
+
+actual val videoNeedsCutouts: Boolean = false

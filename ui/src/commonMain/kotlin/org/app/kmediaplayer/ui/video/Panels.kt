@@ -139,14 +139,14 @@ internal fun PanelHost(window: PlayerWindow) {
     val widthFraction = when (st.panel) { Panel.More -> 0.28f; Panel.Display -> 0.57f; Panel.Equalizer -> 0.5f; Panel.Speed -> 1f; else -> 0.46f }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val portrait = maxHeight > maxWidth
-        if (st.panel == Panel.Speed) { SpeedPanel(st, Modifier.align(Alignment.BottomCenter)); return@BoxWithConstraints }
+        if (st.panel == Panel.Speed) { SpeedPanel(st, Modifier.align(Alignment.BottomCenter).videoCutout()); return@BoxWithConstraints }
         Box(Modifier.fillMaxSize().clickable(interactionSource = null, indication = null) { st.panel = Panel.None })
         val overflow = st.panel != Panel.Display
         val mod = if (portrait) Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.6f)
         else Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(when { st.panel == Panel.Equalizer -> 367.dp; st.panel == Panel.More -> 220.dp; overflow -> 360.dp; st.panel == Panel.Display -> 448.dp; else -> maxWidth * widthFraction })
         val bg = if (overflow) Modifier.background(Brush.horizontalGradient(0f to Color(0x66000000), 0.2f to Color(0xB3000000), 1f to Color(0xCC000000)))
         else if (st.panel == Panel.Display) Modifier.background(Color(0x99000000)) else Modifier.background(PanelBg)
-        Column(mod.then(bg).let { if (overflow && !portrait) it else it.safeDrawingPadding() }.clickable(interactionSource = null, indication = null) {}
+        Column(mod.videoCutout().then(bg).let { if (overflow && !portrait) it else it.safeDrawingPadding() }.clickable(interactionSource = null, indication = null) {}
             .let { if (overflow) it.padding(start = 24.dp, end = 24.dp, top = if (st.panel == Panel.Overflow) 24.dp else 16.dp) else if (st.panel == Panel.Display) it.padding(start = 24.dp, end = 24.dp) else it.padding(horizontal = 20.dp, vertical = 12.dp) }) {
             when (st.panel) {
                 Panel.Overflow -> OverflowPanel(window)
@@ -251,7 +251,6 @@ private fun OverflowPanel(window: PlayerWindow) {
         Item("Network Stream", Res.drawable.ic_ov_network) { networkStream = true },
         Item("Information", Res.drawable.ic_ov_info) { st.panel = Panel.Info },
         Item("Share", Res.drawable.ic_ov_share) { st.current?.let { PlatformMedia.share(listOf(it)) } },
-        Item("Cut", Res.drawable.ic_ov_cut) { st.toast = "Video cutting is not available yet" },
         Item("Bookmark", Res.drawable.ic_ov_bookmark) { st.panel = Panel.Bookmark },
         Item("Tutorial", Res.drawable.ic_ov_tutorial) { tutorial = true },
         Item("More", Res.drawable.ic_chevron_right) { st.panel = Panel.More },
@@ -306,16 +305,8 @@ private fun AudioPanel(window: PlayerWindow) {
     Scroll {
         st.audioTracks.forEach { t -> RadioRow(t.label, t.selected) { st.selectTrack(t, TrackType.Audio) } }
         RadioRow("Disable", st.audioTracks.none { it.selected }) { st.disableAudio() }
-        CheckRow("Use SW audio decoder", st.decoder == Decoder.SW, height = 42.dp) { st.setDecoderMode(if (st.decoder == Decoder.SW) Decoder.HW else Decoder.SW) }
-        PanelDivider()
-        PanelRow("Open") { window.pickFile(listOf("audio/*")) { _, _ -> st.toast = "External audio tracks are not supported by this player" } }
-        PanelRow("Stereo mode", enabled = false) {}
-        PanelRow("Synchronization", enabled = false) {}
-        Row(Modifier.fillMaxWidth().height(42.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("AV sync", Modifier.weight(1f), color = Disabled, fontSize = 14.sp)
-            Box(Modifier.size(20.dp).border(2.dp, Disabled, RoundedCornerShape(2.dp)))
-            Spacer(Modifier.width(2.dp))
-        }
+        // External audio files, stereo mode and audio sync are not implemented on any platform, so they are not offered.
+        if (PlayerCapabilities.decoderChoice) CheckRow("Use SW audio decoder", st.decoder == Decoder.SW, height = 42.dp) { st.setDecoderMode(if (st.decoder == Decoder.SW) Decoder.HW else Decoder.SW) }
     }
 }
 
@@ -332,8 +323,6 @@ private fun SubtitlePanel(window: PlayerWindow) {
         if (st.textTracks.isEmpty() && st.externalSubs == null) PanelRow("No subtitles", enabled = false) {}
         PanelDivider()
         PanelRow("Open") { window.pickFile(listOf("*/*")) { uri, name -> st.loadSubtitle(uri, name) } }
-        PanelRow("Online subtitles", enabled = false) {}
-        PanelRow("AI Subtitle Translation", enabled = false) {}
         Stepper("Synchronization", "${formatDecimal(st.subtitleSyncMs / 1000f, 1)}s", enabled = st.externalSubs != null,
             onMinus = { st.setSubtitleSync(st.subtitleSyncMs - 100) }, onPlus = { st.setSubtitleSync(st.subtitleSyncMs + 100) })
         Stepper("Speed", "${formatDecimal(st.subtitleSpeed * 100, 1)}%", enabled = st.externalSubs != null,
@@ -614,7 +603,7 @@ private fun SleepTimerPanel(st: VideoPlayerState) {
 @Composable
 private fun AbRepeatCard(st: VideoPlayerState) {
     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-        Column(Modifier.align(Alignment.TopEnd).padding(top = 106.dp, end = 4.dp).width(233.dp).background(Color(0xCC161616), RoundedCornerShape(4.dp)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(4.dp)).padding(bottom = 12.dp)) {
+        Column(Modifier.align(Alignment.TopEnd).padding(top = 106.dp, end = 4.dp).width(233.dp).videoCutout().background(Color(0xCC161616), RoundedCornerShape(4.dp)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(4.dp)).padding(bottom = 12.dp)) {
             Row(Modifier.fillMaxWidth().height(42.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("A - B Repeat", Modifier.weight(1f), color = Color.White, fontSize = 14.sp)
                 Box(Modifier.size(42.dp).clickable { st.ab = st.ab.clear(); st.panel = Panel.None }, contentAlignment = Alignment.Center) {
@@ -780,19 +769,19 @@ private fun MorePanel(window: PlayerWindow) {
     val host = KMediaPlayer.host
     var confirmDelete by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
-    val editable = st.current?.uri?.startsWith("content") == true
+    val editable = PlayerCapabilities.fileEditing && st.current?.uri?.let { it.startsWith("content") || it.startsWith("file:") } == true
     PanelTitle("More", onBack = { st.panel = Panel.Overflow })
     Scroll {
         Spacer(Modifier.height(8.dp))
         MoreSection("Tools")
-        PanelRow("Delete", enabled = editable) { confirmDelete = true }
-        PanelRow("Rename", enabled = editable) { renaming = true }
+        if (editable) PanelRow("Delete") { confirmDelete = true }
+        if (editable) PanelRow("Rename") { renaming = true }
         PanelRow("Lock") { st.panel = Panel.None; st.locked = true }
         PanelRow("Settings") { host.openSettings() }
         Spacer(Modifier.height(8.dp))
         MoreSection("Help")
         PanelRow("FAQ") { host.openHelp() }
-        PanelRow("Check for updates") { if (!window.openStorePage()) st.toast = "You're on the latest version" }
+        if (PlayerCapabilities.storeUpdates) PanelRow("Check for updates") { if (!window.openStorePage()) st.toast = "You're on the latest version" }
         PanelRow("Bug Report") { if (!PlatformMedia.openUri("mailto:?subject=${host.appName} bug report")) st.toast = "No email app found" }
     }
     if (confirmDelete) PlayerDialog(
@@ -918,7 +907,7 @@ private fun CustomisePanel() {
     var enabled by remember { mutableStateOf(Shortcut.decode(settings[PlayerKeys.shortcutItems]).toSet()) }
     PanelTitle("Customise Items")
     Scroll {
-        Shortcut.entries.filter { it != Shortcut.Customise }.forEach { sc ->
+        Shortcut.entries.filter { it != Shortcut.Customise && it.isAvailable }.forEach { sc ->
             Row(Modifier.fillMaxWidth().clickable {
                 enabled = if (sc in enabled) enabled - sc else enabled + sc
                 settings[PlayerKeys.shortcutItems] = Shortcut.entries.filter { it in enabled || it == Shortcut.Customise }.joinToString(",") { it.name }

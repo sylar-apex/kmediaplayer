@@ -3,6 +3,7 @@ package org.app.kmediaplayer.ui.video
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,8 @@ import org.app.kmediaplayer.PendingPlayback
  * [PlayerWindow] for hosts that show the player inside their own Compose window (desktop, iOS, web).
  * Platform-only features — brightness, rotation, picture-in-picture, screenshots — are no-ops.
  */
+private val SUBTITLE_EXTENSIONS = listOf("srt", "vtt", "ass", "ssa", "sub", "smi", "txt")
+
 class ComposePlayerWindow(scope: CoroutineScope, private val onClose: () -> Unit) : PlayerWindow {
     override val state = VideoPlayerState(KMediaPlayer.engine, scope)
     override val inPip: Boolean = false
@@ -46,17 +49,22 @@ class ComposePlayerWindow(scope: CoroutineScope, private val onClose: () -> Unit
     override fun applyScreenSettings() {}
     override fun showSystemBars(show: Boolean) {}
     override fun applyOrientation() {}
-    override fun rotate() {}
-    override fun enterPip(): Boolean = false
-    override fun screenshot() { state.toast = "Screenshot unavailable" }
+    /** There is no screen to rotate on desktop and the web; the button toggles full screen instead. */
+    override fun rotate() { if (!PlatformVideoTools.toggleFullscreen()) state.toast = "Full screen is not available here" }
+    override fun enterPip(): Boolean = PlatformVideoTools.enterPip()
+    override fun screenshot() = PlatformVideoTools.captureFrame { state.snack = it }
     override fun setVideoDisplay(on: Boolean) { videoOn = on }
     override fun openStorePage(): Boolean = false
     override fun pickFile(mimeTypes: List<String>, onPicked: (uri: String, name: String) -> Unit) {
-        state.toast = "Opening files is not supported on this platform yet"
+        if (!PlatformVideoTools.pickFile(SUBTITLE_EXTENSIONS, onPicked)) state.toast = "Opening files is not supported on this platform yet"
     }
 
     @Composable
     override fun VideoSurface(modifier: Modifier) {
+        // Brightness gesture (24 of 30 = normal) and night mode tint the picture itself; on the web the
+        // video sits above Compose, so the night-mode overlay alone could not dim it.
+        val factor = (state.brightness / 24f).coerceIn(0.15f, 1.25f) * (if (state.nightMode && videoNeedsCutouts) 0.45f else 1f)
+        LaunchedEffect(factor) { PlatformVideoTools.setPictureBrightness(factor) }
         Box(modifier.background(Color.Black)) {
             if (videoOn) PlatformVideoSurface(Modifier.matchParentSize())
         }

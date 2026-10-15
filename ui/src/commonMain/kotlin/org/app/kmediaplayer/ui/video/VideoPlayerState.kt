@@ -400,6 +400,13 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         if (remember) rememberSelection { it.copy(subtitleTrack = "off") }
     }
 
+    /** Shows or hides subtitles without forgetting a loaded subtitle file (keyboard "C"). */
+    fun toggleSubtitles() {
+        subtitlesDisabled = !subtitlesDisabled
+        if (externalSubs == null) engine.setTrackTypeDisabled(TrackType.Text, subtitlesDisabled)
+        toast = if (subtitlesDisabled) "Subtitles off" else "Subtitles on"
+    }
+
     // ---- external subtitles ----
 
     fun loadSubtitle(uri: String, name: String) {
@@ -429,7 +436,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     fun setSubtitleSync(ms: Long) { subtitleSyncMs = ms; rememberSelection { it.copy(subtitleSyncMs = ms) } }
 
     fun visibleSubtitleLines(): List<SubLine> {
-        if (subtitlesDisabled && externalSubs == null) return emptyList()
+        if (subtitlesDisabled) return emptyList()
         val ext = externalSubs
         return if (ext != null) ext.cuesAt(position, subtitleSyncMs, subtitleSpeed).map { SubLine(it.text, it.italic) }
         else embeddedCues.map { SubLine(it, false) }

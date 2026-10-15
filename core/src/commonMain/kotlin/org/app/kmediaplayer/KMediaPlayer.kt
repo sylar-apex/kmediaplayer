@@ -40,6 +40,12 @@ object KMediaPlayer {
      */
     val videoRequested = MutableStateFlow(false)
 
+    /**
+     * Short messages from platform code (desktop, web, iOS) for the player to show as a toast;
+     * Android shows its own toasts.
+     */
+    val notices = MutableStateFlow<String?>(null)
+
     val engine: MediaEngine get() = PlatformMedia.engine()
 
     fun configure(settings: ObservableSettings, host: PlayerHost) {

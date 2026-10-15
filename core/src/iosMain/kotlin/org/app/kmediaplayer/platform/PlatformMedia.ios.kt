@@ -26,7 +26,7 @@ actual object PlatformMedia {
         UIApplication.sharedApplication.openURL(url, emptyMap<Any?, Any?>(), null)
         return true
     }
-    actual fun showToast(message: String) = println(message)
+    actual fun showToast(message: String) { org.app.kmediaplayer.KMediaPlayer.notices.value = message }
 
     actual fun displayLanguage(code: String): String = code
     actual fun formatShortFileSize(bytes: Long): String = org.app.kmediaplayer.util.formatSize(bytes)

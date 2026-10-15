@@ -44,7 +44,13 @@ class WebVideoBackend : PlaybackBackend {
     override val duration: Long get() = video.duration.takeIf { it.isFinite() }?.times(1000)?.roundToLong() ?: 0
 
     override var volume: Float = 1f
-        set(v) { field = v; video.volume = v.coerceIn(0f, 1f).toDouble() }
+        set(v) { field = v; applyVolume() }
+
+    /** The player's "device volume" (volume gesture), 0..1, applied on top of [volume]. */
+    var outputGain: Float = 1f
+        set(v) { field = v.coerceIn(0f, 1f); applyVolume() }
+
+    private fun applyVolume() { video.volume = (volume * outputGain).coerceIn(0f, 1f).toDouble() }
 
     override var speed: Float = 1f
         set(v) { field = v; video.playbackRate = v.toDouble() }

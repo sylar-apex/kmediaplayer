@@ -1,5 +1,7 @@
 package org.app.kmediaplayer.ui.common
 
+import org.app.kmediaplayer.ui.video.videoCutout
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +47,7 @@ fun PlayerDialog(
             MaterialTheme(colorScheme = darkColorScheme(primary = PlayerAccent, onSurface = Color.White, onSurfaceVariant = Color(0xFFB0B6BE)), typography = MaterialTheme.typography) {
                 CompositionLocalProvider(LocalContentColor provides Color.White) {
                     Column(
-                        modifier.offset(y = if (maxWidth > maxHeight) 9.dp else 0.dp).width(width).background(Color(0xF0161616)).border(1.dp, Color(0x33FFFFFF))
+                        modifier.offset(y = if (maxWidth > maxHeight) 9.dp else 0.dp).width(width).videoCutout().background(Color(0xF0161616)).border(1.dp, Color(0x33FFFFFF))
                             .padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 8.dp),
                     ) {
                         title?.let {

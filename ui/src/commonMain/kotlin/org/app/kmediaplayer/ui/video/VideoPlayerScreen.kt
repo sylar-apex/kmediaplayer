@@ -1,5 +1,14 @@
 package org.app.kmediaplayer.ui.video
 
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -42,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -137,6 +147,12 @@ import kotlin.math.abs
 /** The full-screen video player: surface, gestures, controls, shortcuts, panels and dialogs. */
 @Composable
 fun VideoPlayerScreen(window: PlayerWindow) {
+    val cutouts = remember { if (videoNeedsCutouts) VideoCutouts() else null }
+    CompositionLocalProvider(LocalVideoCutouts provides cutouts) { VideoPlayerContent(window) }
+}
+
+@Composable
+private fun VideoPlayerContent(window: PlayerWindow) {
     val st = window.state
     settingsVersion()
     val s = KMediaPlayer.settings
@@ -145,14 +161,25 @@ fun VideoPlayerScreen(window: PlayerWindow) {
     LaunchedEffect(st.panel) { if (st.panel == Panel.None) st.scheduleHide() }
     LaunchedEffect(st.snack) { if (st.snack != null) { delay(3000); st.snack = null } }
     LaunchedEffect(st.toast) { if (st.toast != null) { delay(1500); st.toast = null } }
+    // Messages from platform code (desktop, web) shown like the player's own toasts.
+    LaunchedEffect(Unit) { KMediaPlayer.notices.collect { msg -> if (msg != null) { st.toast = msg; KMediaPlayer.notices.value = null } } }
     LaunchedEffect(st.videoW, st.videoH) { if (st.landscape == null) window.applyOrientation() }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) {
-        awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            if (st.controlsVisible) st.scheduleHide()
+    val keyboard = remember { FocusRequester() }
+    if (PlayerCapabilities.keyboardShortcuts) LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)
+        .let { m ->
+            if (!PlayerCapabilities.keyboardShortcuts) m
+            else m.focusRequester(keyboard).focusable().onPreviewKeyEvent { PlayerKeyboard.handle(it, window) }
         }
-    }) {
+        .pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                if (st.controlsVisible) st.scheduleHide()
+                // Clicking buttons can move focus away; bring it back so shortcuts keep working.
+                if (PlayerCapabilities.keyboardShortcuts) runCatching { keyboard.requestFocus() }
+            }
+        }) {
         val density = LocalDensity.current
         val cw = with(density) { maxWidth.toPx() }
         val ch = with(density) { maxHeight.toPx() }
@@ -189,14 +216,14 @@ fun VideoPlayerScreen(window: PlayerWindow) {
         st.seekOsd?.let { (target, offset) -> SeekOsd(target, offset, Modifier.align(Alignment.Center)) }
         st.gestureLabel?.let { label ->
             Text(label, color = Color(s[PlayerKeys.osdTextColor]), fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center).background(if (s[PlayerKeys.osdBackground]) Color(s[PlayerKeys.osdBackColor]) else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 22.dp, vertical = 12.dp))
+                modifier = Modifier.align(Alignment.Center).videoCutout().background(if (s[PlayerKeys.osdBackground]) Color(s[PlayerKeys.osdBackColor]) else Color.Transparent, RoundedCornerShape(10.dp)).padding(horizontal = 22.dp, vertical = 12.dp))
         }
         st.toast?.let { msg ->
-            Text(msg, color = Color.White, fontSize = 15.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 140.dp).background(Color(0xCC222222), RoundedCornerShape(6.dp)).padding(horizontal = 16.dp, vertical = 8.dp))
+            Text(msg, color = Color.White, fontSize = 15.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 140.dp).videoCutout().background(Color(0xCC222222), RoundedCornerShape(6.dp)).padding(horizontal = 16.dp, vertical = 8.dp))
         }
 
         st.snack?.let { msg ->
-            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().safeDrawingPadding().padding(bottom = 25.dp).height(28.dp).background(Color(0xCC000000)).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().safeDrawingPadding().padding(bottom = 25.dp).height(28.dp).videoCutout().background(Color(0xCC000000)).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
                 Text(msg, color = Color.White, fontSize = 12.sp, maxLines = 1)
             }
         }
@@ -254,12 +281,14 @@ private fun SubtitleLayer(st: VideoPlayerState, modifier: Modifier, fitted: Size
         modifier.fillMaxWidth()
             .padding(bottom = videoBottomGap + (s[PlayerKeys.subBottomMargin] * 2).dp, start = 24.dp, end = 24.dp)
             .graphicsLayer { translationY = st.subtitleOffsetY }
-            .let { if (s[PlayerKeys.subBackground]) it.background(Color(s[PlayerKeys.subBackgroundColor])) else it },
+            // With a full-width background the whole block covers the video; otherwise only each line does.
+            .let { if (s[PlayerKeys.subBackground]) it.videoCutout().background(Color(s[PlayerKeys.subBackgroundColor])) else it },
         horizontalAlignment = when (align) { TextAlign.Left -> Alignment.Start; TextAlign.Right -> Alignment.End; else -> Alignment.CenterHorizontally },
     ) {
         lines.forEach { line ->
             Text(
                 line.text,
+                Modifier.videoCutout(),
                 style = TextStyle(
                     color = Color(s[PlayerKeys.subColor]), fontSize = size, fontFamily = family, textAlign = align,
                     fontWeight = if (s[PlayerKeys.subBold]) FontWeight.Bold else FontWeight.Normal,
@@ -439,7 +468,7 @@ private fun flashPill(st: VideoPlayerState, scope: CoroutineScope, value: Pair<D
 
 @Composable
 private fun OsdPill(icon: DrawableResource, text: String, modifier: Modifier) {
-    Row(modifier.height(30.dp).background(Color(0xD91E2A33), RoundedCornerShape(50)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.videoCutout().height(30.dp).background(Color(0xD91E2A33), RoundedCornerShape(50)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(painterResource(icon), null, Modifier.size(14.dp), tint = Color.White)
         Spacer(Modifier.width(6.dp))
         Text(text, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
@@ -456,12 +485,15 @@ private fun TapSeekOsd(dir: Int, seconds: Int) {
         val cx = if (dir > 0) w - inset else inset
         Canvas(Modifier.fillMaxSize()) { drawCircle(Color(0x4D000000), r, Offset(cx, h / 2)) }
         val visible = with(LocalDensity.current) { (r - inset).toDp() }
-        Column(
-            Modifier.align(if (dir > 0) Alignment.CenterEnd else Alignment.CenterStart).width(visible),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(painterResource(if (dir > 0) Res.drawable.ic_pl_ff else Res.drawable.ic_pl_rew), null, Modifier.size(18.dp), tint = Color.White)
-            Text("${seconds}s", color = Color.White, fontSize = 15.sp)
+        Box(Modifier.align(if (dir > 0) Alignment.CenterEnd else Alignment.CenterStart).width(visible), contentAlignment = Alignment.Center) {
+            // A compact badge: on the web only this small area is cut out of the video.
+            Column(
+                Modifier.videoCutout().background(Color(0x99000000), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(painterResource(if (dir > 0) Res.drawable.ic_pl_ff else Res.drawable.ic_pl_rew), null, Modifier.size(18.dp), tint = Color.White)
+                Text("${seconds}s", color = Color.White, fontSize = 15.sp)
+            }
         }
     }
 }
@@ -470,7 +502,7 @@ private fun TapSeekOsd(dir: Int, seconds: Int) {
 private fun LevelPill(osd: LevelOsd, modifier: Modifier) {
     val blue = PlayerAccent
     Column(
-        modifier.safeDrawingPadding().padding(start = 16.dp, end = 32.dp).size(33.dp, 160.dp)
+        modifier.safeDrawingPadding().padding(start = 16.dp, end = 32.dp).size(33.dp, 160.dp).videoCutout()
             .background(Color(0xBF1E2229), RoundedCornerShape(50)).padding(top = 8.dp, bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -495,7 +527,7 @@ private fun LevelPill(osd: LevelOsd, modifier: Modifier) {
 @Composable
 private fun SeekOsd(target: Long, offset: Long, modifier: Modifier) {
     val style = TextStyle(color = Color(0xFFF2F2F2), fontSize = 46.sp, fontWeight = FontWeight.SemiBold, shadow = Shadow(Color(0xCC000000), Offset(0f, 2f), 8f), textAlign = TextAlign.Center)
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.videoCutout(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(formatDuration(target), style = style, lineHeight = 52.sp)
         Text("[${if (offset >= 0) "+" else "-"}${formatDuration(abs(offset))}]", style = style.copy(fontSize = 40.sp), lineHeight = 48.sp)
     }
@@ -509,7 +541,7 @@ private fun LockOverlay(st: VideoPlayerState) {
     if (!shown) return
     Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         Box(
-            Modifier.padding(start = 59.dp, top = 0.dp).size(44.dp)
+            Modifier.padding(start = 59.dp, top = 0.dp).size(44.dp).videoCutout()
                 .combinedClickable(interactionSource = null, indication = null,
                     onClick = { if (!kids) { st.locked = false; st.showControls() } else st.toast = "Long press to unlock" },
                     onLongClick = { st.locked = false; st.showControls() }),
@@ -527,7 +559,7 @@ private fun PersistentOsd(st: VideoPlayerState, modifier: Modifier) {
     }
     if (parts.isEmpty()) return
     val pad = if (s[PlayerKeys.cornerOffsetEnabled]) (s[PlayerKeys.cornerOffset] + 12).dp else 12.dp
-    Text(parts.joinToString("   "), modifier.safeDrawingPadding().padding(pad)
+    Text(parts.joinToString("   "), modifier.safeDrawingPadding().padding(pad).videoCutout()
         .background(if (s[PlayerKeys.osdBackground]) Color(s[PlayerKeys.osdBackColor]) else Color.Transparent, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
         color = Color(s[PlayerKeys.osdTextColor]), fontSize = 13.sp)
 }
@@ -555,22 +587,22 @@ private fun Controls(window: PlayerWindow, portrait: Boolean) {
     val frame = Color(s[PlayerKeys.frameColor])
     val transportWidth = if (portrait) 50.dp else 90.dp
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(frame, Color.Transparent))).safeDrawingPadding()) {
+        Column(Modifier.fillMaxWidth().videoCutout().background(Brush.verticalGradient(listOf(frame, Color.Transparent))).safeDrawingPadding()) {
             Row(Modifier.height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 CtlButton({ window.close() }, 56.dp, 56.dp) { Ic(Res.drawable.ic_back, "Navigate up", tint) }
                 Spacer(Modifier.width(16.dp))
                 Text(st.title, Modifier.weight(1f), color = tint, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (s[PlayerKeys.batteryClockInTitle]) Text(clockAndBattery(), color = tint, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp))
                 Spacer(Modifier.width(12.dp))
-                CtlButton({ st.panel = Panel.Audio }, 48.dp, 48.dp) { Ic(Res.drawable.ic_pl_audio, "Audio Track", tint) }
+                if (PlayerCapabilities.audioTrackSelection) CtlButton({ st.panel = Panel.Audio }, 48.dp, 48.dp) { Ic(Res.drawable.ic_pl_audio, "Audio Track", tint) }
                 CtlButton({ st.panel = Panel.Subtitle }, 48.dp, 48.dp) { Ic(Res.drawable.ic_pl_subs, "Subtitles", tint) }
-                CtlButton({ st.panel = Panel.Decoder }, 48.dp, 48.dp) { Text(st.decoder.label, color = tint, fontSize = 12.5.sp, fontWeight = FontWeight.Bold) }
+                if (PlayerCapabilities.decoderChoice) CtlButton({ st.panel = Panel.Decoder }, 48.dp, 48.dp) { Text(st.decoder.label, color = tint, fontSize = 12.5.sp, fontWeight = FontWeight.Bold) }
                 CtlButton({ st.panel = Panel.Overflow }, 48.dp, 48.dp) { Ic(Res.drawable.ic_more_vert, "More", tint) }
             }
             if (s[PlayerKeys.shortcutsVisible]) ShortcutRow(window, tint, highlight)
         }
 
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().videoCutout()) {
             st.resumeNotice?.let { Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) { ResumeNotice(st) } }
             Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, frame))).safeDrawingPadding().padding(bottom = 16.dp)) {
                 val below = s[PlayerKeys.progressBelowButtons]
@@ -586,7 +618,13 @@ private fun Controls(window: PlayerWindow, portrait: Boolean) {
                     }
                     Row(Modifier.align(Alignment.CenterEnd)) {
                         CtlButton({ st.cycleZoom(); st.toast = st.zoom.name }, 50.dp, 46.dp) { Ic(Res.drawable.ic_pl_zoom, "Zoom", tint) }
-                        CtlButton({ if (!window.enterPip()) st.toast = "Picture-in-picture not supported" }, 50.dp, 46.dp) { Ic(Res.drawable.ic_pl_pip, "Popup", tint) }
+                        if (PlayerCapabilities.pictureInPicture) CtlButton({ if (!window.enterPip()) st.toast = "Picture-in-picture not supported" }, 50.dp, 46.dp) { Ic(Res.drawable.ic_pl_pip, "Popup", tint) }
+                        if (PlayerCapabilities.fullscreenButton) CtlButton({ PlatformVideoTools.toggleFullscreen() }, 50.dp, 46.dp) {
+                            Icon(
+                                if (PlatformVideoTools.isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                if (PlatformVideoTools.isFullscreen) "Exit full screen" else "Full screen", Modifier.size(26.dp), tint = tint,
+                            )
+                        }
                     }
                 }
                 if (below) SeekRow(st)
@@ -662,7 +700,8 @@ private fun ShortcutRow(window: PlayerWindow, tint: Color, highlight: Color) {
     val st = window.state
     val enabled = Shortcut.decode(KMediaPlayer.settings[PlayerKeys.shortcutItems]).toSet()
     val expanded = st.shortcutsExpanded
-    val items = if (expanded) Shortcut.entries.filter { it in enabled || it == Shortcut.Customise } else Shortcut.collapsed.filter { it in enabled }
+    val items = (if (expanded) Shortcut.entries.filter { it in enabled || it == Shortcut.Customise } else Shortcut.collapsed.filter { it in enabled })
+        .filter { it.isAvailable }
     Row(Modifier.height(if (expanded) 80.dp else 50.dp).horizontalScroll(rememberScrollState()).padding(top = 8.dp), verticalAlignment = Alignment.Top) {
         items.forEach { sc ->
             val active = when (sc) {

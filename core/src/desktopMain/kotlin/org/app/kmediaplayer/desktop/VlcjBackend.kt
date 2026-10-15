@@ -46,6 +46,10 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
     override var volume: Float = 1f
         set(v) { field = v; applyVolume() }
 
+    /** The player's "device volume" (volume gesture), 0..1, applied on top of [volume]. */
+    var outputGain: Float = 1f
+        set(v) { field = v.coerceIn(0f, 1f); applyVolume() }
+
     /** Loudness multiplier from volume boost, 1 = none. */
     internal var boost: Float = 1f
         set(v) { field = v; applyVolume() }
@@ -133,7 +137,7 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
         player.release()
     }
 
-    private fun applyVolume() { player.audio().setVolume((volume * boost * 100).toInt().coerceIn(0, 200)) }
+    private fun applyVolume() { player.audio().setVolume((volume * outputGain * boost * 100).toInt().coerceIn(0, 200)) }
 
     private fun setState(s: EngineState) {
         if (state == s) return

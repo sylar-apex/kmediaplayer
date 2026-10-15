@@ -45,3 +45,5 @@ actual fun PlatformVideoSurface(modifier: Modifier) {
         },
     )
 }
+
+actual val videoNeedsCutouts: Boolean = false

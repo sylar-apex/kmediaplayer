@@ -15,6 +15,16 @@ object MediaFormats {
     val legacyAudioExtensions: Set<String> = setOf("wma", "ra", "ram", "tta", "ape", "wv", "mpc", "dts")
 
     val legacyExtensions: Set<String> = legacyVideoExtensions + legacyAudioExtensions
+
+    /** Every video file type the library lists. */
+    val videoExtensions: Set<String> = setOf(
+        "mp4", "m4v", "mkv", "webm", "avi", "mov", "qt", "ts", "flv", "f4v", "3gp", "3g2", "mpg", "mpeg", "mpe", "ogv",
+    ) + legacyVideoExtensions
+
+    /** Every audio file type the library lists. */
+    val audioExtensions: Set<String> = setOf(
+        "mp3", "m4a", "m4b", "aac", "flac", "wav", "ogg", "oga", "opus", "alac", "aif", "aiff", "ac3", "eac3", "mka", "amr",
+    ) + legacyAudioExtensions
 }
 
 /** Lower-case extension of a file path or URL, ignoring any query string or fragment. */

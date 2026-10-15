@@ -58,3 +58,9 @@ kotlin {
         }
     }
 }
+
+// Optional libVLC integration test: `-PvlcPath=<libvlc dir> -PprobeClips=<clips folder>`.
+tasks.withType<Test>().configureEach {
+    providers.gradleProperty("vlcPath").orNull?.let { systemProperty("vlc.path", it) }
+    providers.gradleProperty("probeClips").orNull?.let { systemProperty("probe.clips", it) }
+}

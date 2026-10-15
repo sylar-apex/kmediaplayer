@@ -10,3 +10,5 @@ import androidx.compose.ui.Modifier
 @Composable
 expect fun PlatformVideoSurface(modifier: Modifier)
 
+/** True where the video element covers the Compose canvas (the web) and overlays must cut through it. */
+expect val videoNeedsCutouts: Boolean
