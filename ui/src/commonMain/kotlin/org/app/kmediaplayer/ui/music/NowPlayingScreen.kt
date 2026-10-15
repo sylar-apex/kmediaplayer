@@ -49,8 +49,6 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -82,6 +80,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Share
 import kotlinx.coroutines.delay
 import org.app.kmediaplayer.KMediaPlayer
 import org.app.kmediaplayer.engine.EngineListener
@@ -176,11 +177,25 @@ fun NowPlayingScreen(addToPlaylist: AddToPlaylistSlot? = null, onClose: () -> Un
         }
 
         when (sheet) {
-            "eq" -> Dialog(onDismissRequest = { sheet = null }) {
-                Column(Modifier.fillMaxWidth().background(Color(0xF2181A20), RoundedCornerShape(20.dp)).padding(20.dp)) { EqualizerPanel() }
+            "eq" -> Sheet({ sheet = null }) { Column(Modifier.padding(horizontal = 20.dp)) { EqualizerPanel() } }
+            "queue" -> Sheet({ sheet = null }) {
+                QueuePanel(queue, index, playing, player, Modifier.fillMaxWidth().heightIn(max = 520.dp), sheet = true, onPicked = { sheet = null })
             }
-            "queue" -> Dialog(onDismissRequest = { sheet = null }) {
-                QueuePanel(queue, index, playing, player, Modifier.fillMaxWidth().heightIn(max = 560.dp), onPicked = { sheet = null })
+            "speed" -> Sheet({ sheet = null }, title = "Playback speed") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    speeds.forEach { s ->
+                        val on = player.speed == s
+                        Box(
+                            Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp)).background(if (on) PlayerAccent else Color(0x14FFFFFF))
+                                .clickable { player.speed = s; sheet = null },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("${s}x", color = if (on) Color.Black else Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+            }
+            "more" -> Sheet({ sheet = null }, title = file?.title) {
+                if (addToPlaylist != null) SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist") { sheet = "add" }
+                SheetRow(Icons.Default.Share, "Share") { sheet = null; file?.let { PlatformMedia.share(listOf(it)) } }
             }
             "add" -> file?.let { f -> addToPlaylist?.invoke(f) { sheet = null } }
         }
@@ -229,7 +244,9 @@ private fun Artwork(seed: String, playing: Boolean, modifier: Modifier) {
     BoxWithConstraints(modifier.fillMaxWidth().aspectRatio(1.25f), contentAlignment = Alignment.CenterStart) {
         val card = minOf(maxHeight, maxWidth / 1.25f) * scale
         val (a, _) = coverColors(seed)
-        Box(Modifier.offset(x = card * slide).size(card * 0.96f).rotate(spin.value), contentAlignment = Alignment.Center) {
+        // Centre the cover plus the record peeking out beside it.
+        val start = ((maxWidth - card * (slide + 0.96f).coerceAtLeast(1f)) / 2).coerceAtLeast(0.dp)
+        Box(Modifier.offset(x = start + card * slide).size(card * 0.96f).rotate(spin.value), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val r = size.minDimension / 2
                 drawCircle(Color(0xFF050505), r)
@@ -241,7 +258,7 @@ private fun Artwork(seed: String, playing: Boolean, modifier: Modifier) {
         }
         CoverArt(
             seed,
-            Modifier.size(card).shadow(32.dp, RoundedCornerShape(22.dp), ambientColor = a, spotColor = a),
+            Modifier.offset(x = start).size(card).shadow(32.dp, RoundedCornerShape(22.dp), ambientColor = a, spotColor = a),
             corner = 22.dp,
         )
     }
@@ -344,8 +361,6 @@ private fun SeekBar(player: MediaEngine, ab: AbRepeat) {
 /** Equalizer, A-B repeat, speed, lyrics, queue and more, as a row of glass pills. */
 @Composable
 private fun ActionBar(file: MediaFile?, player: MediaEngine, ab: AbRepeat, canAddToPlaylist: Boolean, onSheet: (String) -> Unit, showQueueButton: Boolean) {
-    var speedMenu by remember { mutableStateOf(false) }
-    var moreMenu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x0FFFFFFF)).padding(horizontal = 4.dp, vertical = 0.dp),
         horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
@@ -358,36 +373,25 @@ private fun ActionBar(file: MediaFile?, player: MediaEngine, ab: AbRepeat, canAd
                 else -> { ab.clear(); PlatformMedia.showToast("A-B repeat off") }
             }
         }) { Text("A-B", color = if (ab.a >= 0) PlayerAccent else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-        Box {
-            IconButton({ speedMenu = true }) {
-                if (player.speed != 1f) Text("${player.speed}x", color = PlayerAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                else Icon(Icons.Default.Speed, "Speed", Modifier.size(22.dp), tint = Color.White)
-            }
-            DropdownMenu(speedMenu, { speedMenu = false }) {
-                speeds.forEach { s -> DropdownMenuItem({ Text("${s}x") }, { speedMenu = false; player.speed = s }) }
-            }
+        IconButton({ onSheet("speed") }) {
+            if (player.speed != 1f) Text("${player.speed}x", color = PlayerAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            else Icon(Icons.Default.Speed, "Speed", Modifier.size(22.dp), tint = Color.White)
         }
         IconButton({ PlatformMedia.showToast("No lyrics found") }) { Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(22.dp), tint = Color.White) }
         if (showQueueButton) IconButton({ onSheet("queue") }) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Playing queue", Modifier.size(22.dp), tint = Color.White) }
-        Box {
-            IconButton({ moreMenu = true }) { Icon(Icons.Default.MoreHoriz, "More", Modifier.size(22.dp), tint = Color.White) }
-            DropdownMenu(moreMenu, { moreMenu = false }) {
-                if (canAddToPlaylist) DropdownMenuItem({ Text("Add to Playlist") }, { moreMenu = false; onSheet("add") })
-                DropdownMenuItem({ Text("Share") }, { moreMenu = false; file?.let { PlatformMedia.share(listOf(it)) } })
-            }
-        }
+        IconButton({ onSheet("more") }) { Icon(Icons.Default.MoreHoriz, "More", Modifier.size(22.dp), tint = Color.White) }
     }
 }
 
 @Composable
-private fun QueuePanel(queue: List<MediaFile>, index: Int, playing: Boolean, player: MediaEngine, modifier: Modifier, onPicked: () -> Unit = {}) {
+private fun QueuePanel(queue: List<MediaFile>, index: Int, playing: Boolean, player: MediaEngine, modifier: Modifier, sheet: Boolean = false, onPicked: () -> Unit = {}) {
     val list = rememberLazyListState()
     var query by remember { mutableStateOf("") }
     val shown = remember(queue, query) {
         queue.withIndex().filter { (_, f) -> query.isBlank() || f.title.contains(query, true) || f.artist.contains(query, true) || f.album.contains(query, true) }
     }
     LaunchedEffect(index) { if (query.isBlank() && index in queue.indices) list.animateScrollToItem((index - 2).coerceAtLeast(0)) }
-    Column(modifier.clip(RoundedCornerShape(20.dp)).background(Color(0x99101216)).padding(top = 16.dp, bottom = 8.dp)) {
+    Column(if (sheet) modifier else modifier.clip(RoundedCornerShape(20.dp)).background(Color(0x99101216)).padding(top = 16.dp, bottom = 8.dp)) {
         Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Up next", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
@@ -438,5 +442,37 @@ private fun QueuePanel(queue: List<MediaFile>, index: Int, playing: Boolean, pla
 private fun GlassButton(painter: Painter, label: String, onClick: () -> Unit) {
     Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0x1FFFFFFF)).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(painter, label, Modifier.size(22.dp), tint = Color.White)
+    }
+}
+
+/** Opaque bottom sheet with a grab handle; tap outside to close. Centred and width-capped on big screens. */
+@Composable
+private fun Sheet(onDismiss: () -> Unit, title: String? = null, content: @Composable () -> Unit) {
+    Dialog(onDismiss, DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().clickable(interactionSource = null, indication = null, onClick = onDismiss), contentAlignment = Alignment.BottomCenter) {
+            Column(
+                Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Color(0xFF16181E))
+                    .clickable(interactionSource = null, indication = null) {}
+                    .navigationBarsPadding().padding(top = 10.dp, bottom = 16.dp),
+            ) {
+                Box(Modifier.align(Alignment.CenterHorizontally).size(36.dp, 4.dp).clip(CircleShape).background(Color(0x33FFFFFF)))
+                Spacer(Modifier.height(14.dp))
+                if (title != null) {
+                    Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp))
+                }
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, Modifier.size(22.dp), tint = Color.White)
+        Spacer(Modifier.width(16.dp))
+        Text(label, color = Color.White, fontSize = 15.sp)
     }
 }

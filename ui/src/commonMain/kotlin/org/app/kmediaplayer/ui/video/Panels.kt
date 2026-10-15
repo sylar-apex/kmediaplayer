@@ -477,8 +477,9 @@ fun EqualizerPanel() {
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             (0 until fx.bandCount).forEach { b ->
                 var level by remember(version, b) { mutableFloatStateOf(fx.bandLevel(b).toFloat()) }
-                Column(Modifier.width(60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("${round(level / 100).toInt()} dB", color = fg, fontSize = 10.sp)
+                // Bands share the width evenly so 5-10 of them fit any screen.
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("${round(level / 100).toInt()}" + if (fx.bandCount > 6) "" else " dB", color = fg, fontSize = 10.sp, maxLines = 1, softWrap = false)
                     Spacer(Modifier.height(3.dp))
                     VerticalSlider(level, range.first.toFloat()..range.last.toFloat(), enabled = on, color = active) {
                         level = it
@@ -488,7 +489,7 @@ fun EqualizerPanel() {
                         settings[PlayerKeys.equalizerBands] = (0 until fx.bandCount).joinToString(",") { i -> fx.bandLevel(i).toString() }
                     }
                     Spacer(Modifier.height(2.dp))
-                    Text("${fx.centerFreqHz(b)} Hz", color = fg, fontSize = 10.sp, maxLines = 1, softWrap = false)
+                    Text(fx.centerFreqHz(b).let { if (it >= 1000) "${it / 1000}k" else "$it" } + if (fx.bandCount > 6) "" else "Hz", color = fg, fontSize = 10.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
