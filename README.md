@@ -85,6 +85,13 @@ class PlayerActivity : KMediaPlayerActivity() {
 }
 ```
 
+For a video at the top of a detail page, use the inline player. Its full-screen button opens the full
+player on the same playback, and the inline player continues from there when the full player closes:
+
+```kotlin
+InlineVideoPlayer(files, index = 0, autoPlay = true)
+```
+
 On desktop, iOS and web, show the player inside your window with `ComposePlayerWindow` whenever `KMediaPlayer.videoRequested` is true.
 
 ## Platform status

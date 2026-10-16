@@ -11,6 +11,9 @@ import org.app.kmediaplayer.settings.ObservableSettings
 import org.app.kmediaplayer.settings.PlayerKeys
 
 /** What the video screen should open next, handed over without serialising the queue into an intent. */
+/** The file the full player showed when it closed, its position and whether it was playing. */
+data class ClosedPlayback(val uri: String, val positionMs: Long, val playing: Boolean)
+
 sealed interface PendingPlayback {
     data class Files(val files: List<MediaFile>, val index: Int) : PendingPlayback
     data class Stream(val url: String) : PendingPlayback
@@ -48,6 +51,12 @@ object KMediaPlayer {
 
     val engine: MediaEngine get() = PlatformMedia.engine()
 
+    /** True while the full player is shown after [expandVideo]; an inline player takes over again when it turns false. */
+    val fullPlayerOpen = MutableStateFlow(false)
+
+    /** Where the full player was when it closed, so an inline player can continue from there. */
+    var lastClosed: ClosedPlayback? = null
+
     fun configure(settings: ObservableSettings, host: PlayerHost) {
         this.settings = settings
         this.host = host
@@ -57,6 +66,22 @@ object KMediaPlayer {
         if (files.isEmpty()) return
         pending = PendingPlayback.Files(files, index.coerceIn(files.indices))
         PlatformMedia.launchVideoPlayer()
+    }
+
+    /**
+     * Opens the full player on whatever is playing now, without restarting it. An inline player uses
+     * this for its full-screen button.
+     */
+    fun expandVideo() {
+        pending = null
+        fullPlayerOpen.value = true
+        PlatformMedia.launchVideoPlayer()
+    }
+
+    /** Called by player windows as they close. */
+    fun onPlayerClosed(uri: String?, positionMs: Long, playing: Boolean) {
+        lastClosed = uri?.let { ClosedPlayback(it, positionMs, playing) }
+        fullPlayerOpen.value = false
     }
 
     fun playUrl(url: String) {

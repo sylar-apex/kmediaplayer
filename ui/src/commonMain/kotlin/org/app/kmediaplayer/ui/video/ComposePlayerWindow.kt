@@ -38,6 +38,7 @@ class ComposePlayerWindow(scope: CoroutineScope, private val onClose: () -> Unit
     }
 
     override fun close() {
+        KMediaPlayer.onPlayerClosed(state.current?.uri, state.engine.position, state.engine.isPlaying)
         state.saveProgress()
         state.detach()
         state.engine.stop()

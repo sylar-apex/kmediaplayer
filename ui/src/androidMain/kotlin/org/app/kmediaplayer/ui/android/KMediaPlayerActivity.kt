@@ -120,7 +120,8 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
                 when (val p = KMediaPlayer.pending) {
                     is PendingPlayback.Files -> state.start(p.files, p.index)
                     is PendingPlayback.Stream -> state.startUrl(p.url)
-                    null -> return false
+                    // KMediaPlayer.expandVideo(): an inline player hands over what it is playing.
+                    null -> if ((Media3Engine.current?.mediaItemCount ?: 0) > 0) state.reattach() else return false
                 }
                 KMediaPlayer.pending = null
             }
@@ -255,6 +256,7 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
 
     override fun close() {
         closing = true
+        KMediaPlayer.onPlayerClosed(state.current?.uri, state.engine.position, state.engine.isPlaying)
         state.saveProgress()
         state.detach()
         state.engine.stop()
