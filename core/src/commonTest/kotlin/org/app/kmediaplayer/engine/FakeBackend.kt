@@ -1,5 +1,7 @@
 package org.app.kmediaplayer.engine
 
+import org.app.kmediaplayer.model.StreamExtras
+
 /** Records what the engine asks of it; tests drive its events by hand. */
 class FakeBackend(val name: String = "fake") : PlaybackBackend {
     override var callback: BackendCallback? = null
@@ -16,7 +18,7 @@ class FakeBackend(val name: String = "fake") : PlaybackBackend {
     override var volume = 1f
     override var speed = 1f
 
-    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder) {
+    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder, extras: StreamExtras) {
         opened += uri; openedAt = startMs; lastDecoder = decoder; playing = playWhenReady; state = EngineState.Ready
     }
     override fun play() { playing = true }

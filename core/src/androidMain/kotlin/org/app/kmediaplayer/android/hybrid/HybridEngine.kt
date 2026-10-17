@@ -24,6 +24,7 @@ import org.app.kmediaplayer.engine.RepeatMode
 import org.app.kmediaplayer.engine.TrackInfo
 import org.app.kmediaplayer.engine.TrackType
 import org.app.kmediaplayer.model.MediaFile
+import org.app.kmediaplayer.model.StreamExtras
 import org.app.kmediaplayer.settings.PlayerKeys
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -43,6 +44,8 @@ object HybridEngine : MediaEngine {
 
     /** File names by URI, so content:// items can still be routed by extension. */
     private val names = HashMap<String, String>()
+    /** Separate audio stream and User-Agent by URI, for network items. */
+    private val extras = HashMap<String, StreamExtras>()
 
     private val vlcHolder = lazy { VlcPlayback(KMediaPlayerAndroid.context, vlcCallback) }
     private val vlc: VlcPlayback by vlcHolder
@@ -85,7 +88,7 @@ object HybridEngine : MediaEngine {
         surface?.takeIf { videoEnabled }?.let(vlc::attachSurface)
         vlc.rate = exo.speed
         vlc.volume = exo.volume
-        runCatching { vlc.open(uri, startMs, hardware = decoder != Decoder.SW, playWhenReady = playWhenReady) }
+        runCatching { vlc.open(uri, startMs, hardware = decoder != Decoder.SW, playWhenReady = playWhenReady, extras = extras[uri] ?: StreamExtras.None) }
             .onFailure { Log.e(TAG, "libVLC could not open $uri", it); endDetour(); dispatch { it.onError(EngineError("ERROR_CODE_IO_FILE_NOT_FOUND")) }; return }
         dispatch { it.onItemTransition(); it.onTracksChanged(); it.onEvents() }
         session?.refresh()
@@ -230,7 +233,7 @@ object HybridEngine : MediaEngine {
 
     override fun setItems(files: List<MediaFile>, startIndex: Int, startPositionMs: Long) {
         endDetour()
-        files.forEach { names[it.uri] = it.name }
+        files.forEach { names[it.uri] = it.name; extras[it.uri] = it.extras }
         exo.setItems(files, startIndex, startPositionMs)
     }
 
@@ -248,7 +251,7 @@ object HybridEngine : MediaEngine {
     }
 
     override fun stop() { endDetour(); exo.stop() }
-    override fun clearItems() { endDetour(); exo.clearItems(); names.clear() }
+    override fun clearItems() { endDetour(); exo.clearItems(); names.clear(); extras.clear() }
 
     override fun seekTo(positionMs: Long) {
         if (isDetour) vlc.seekTo(positionMs, fast = KMediaPlayer.settings[PlayerKeys.fastSeek]) else exo.seekTo(positionMs)

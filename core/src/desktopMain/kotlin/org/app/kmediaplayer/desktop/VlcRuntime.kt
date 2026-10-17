@@ -20,17 +20,36 @@ object VlcRuntime {
         "--file-caching=1000",
         "--network-caching=2000",
         "--subsdec-encoding=UTF-8",
+        // Trust the shipped plugins.dat: packaging rewrites file times, which would otherwise make libVLC
+        // treat the cache as stale and dlopen all ~350 plugins at every start.
+        "--no-plugins-scan",
     )
 
     /** The libVLC factory, or null when VLC is not installed. */
     val factory: MediaPlayerFactory? by lazy {
         runCatching {
-            System.getProperty("vlc.path")?.let { System.setProperty("jna.library.path", it) }
-            if (!NativeDiscovery().discover()) return@runCatching null
+            val started = System.currentTimeMillis()
+            (System.getProperty("vlc.path") ?: bundledLibDir())?.let { System.setProperty("jna.library.path", it) }
+            if (!NativeDiscovery().discover()) {
+                System.err.println("libVLC not found or wrong architecture (${System.getProperty("os.arch")}): the bundled libVLC is missing (run :desktopApp:prepareVlc), or pass -Dvlc.path")
+                return@runCatching null
+            }
             // `-Dvlc.verbose` prints libVLC's own log for diagnosing a file that will not play.
             MediaPlayerFactory(if (System.getProperty("vlc.verbose") != null) args - "--quiet" + "-vv" else args)
+                .also { println("libVLC ${it.application().version()} ready in ${System.currentTimeMillis() - started} ms") }
         }.onFailure { System.err.println("libVLC unavailable: $it") }.getOrNull()
     }
 
     val isAvailable: Boolean get() = factory != null
+
+    /**
+     * The libVLC the app ships with: `<resources>/vlc/lib` on macOS (plugins in `../plugins`, where libVLC
+     * looks for them) or `<resources>/vlc` on Windows. Null when the app runs without bundled resources.
+     */
+    private fun bundledLibDir(): String? {
+        val vlc = System.getProperty("compose.application.resources.dir")?.let { java.io.File(it, "vlc") } ?: return null
+        return listOf(java.io.File(vlc, "lib"), vlc).firstOrNull { dir ->
+            dir.listFiles()?.any { it.name.startsWith("libvlc.") } == true
+        }?.absolutePath
+    }
 }

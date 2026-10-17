@@ -90,7 +90,7 @@ class QueuedMediaEngine(
         val file = items.getOrNull(currentIndex) ?: return
         ended = false
         opened = true
-        backend.open(file.uri, startPositionMs, playWhenReady, decoder)
+        backend.open(file.uri, startPositionMs, playWhenReady, decoder, file.extras)
         startPositionMs = 0
     }
 

@@ -6,7 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
@@ -24,7 +29,11 @@ import org.jetbrains.skia.ImageInfo
 /** Draws libVLC's frames with Skia. Only the draw phase reads the frame counter, so frames never recompose. */
 @Composable
 actual fun PlatformVideoSurface(modifier: Modifier) {
-    val frames = DesktopPlayback.backend?.frames ?: return Box(modifier)
+    val frames = DesktopPlayback.backend?.frames ?: return Box(modifier, contentAlignment = Alignment.Center) {
+        // Without libVLC nothing can decode; say so instead of a silent black frame.
+        Text("Video engine (libVLC) could not be loaded on this computer (${System.getProperty("os.arch")}).",
+            color = Color.White, fontSize = 13.sp, textAlign = TextAlign.Center)
+    }
     val version = frames.version.collectAsState()
     val bitmap = remember { Bitmap() }
     DisposableEffect(bitmap) { onDispose { bitmap.close() } }

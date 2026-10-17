@@ -16,6 +16,8 @@ data class MediaFile(
     val isAudio: Boolean = false,
     val artist: String = "",
     val album: String = "",
+    /** Network extras for streams (separate audio track, User-Agent); none for local files. */
+    val extras: StreamExtras = StreamExtras.None,
 ) {
     val folderPath: String get() = path.substringBeforeLast('/', "")
     val folderName: String get() = folderPath.substringAfterLast('/')
@@ -23,6 +25,14 @@ data class MediaFile(
     val title: String get() = if ('.' in name) name.substringBeforeLast('.') else name
     val resolutionPixels: Long get() = width.toLong() * height
     val isHidden: Boolean get() = path.split('/').any { it.startsWith('.') && it.length > 1 }
+}
+
+/**
+ * What a network stream needs beyond its URL: [audioUri] is a separate audio stream played in sync
+ * with the video (YouTube's DASH qualities), [userAgent] the HTTP User-Agent the server expects.
+ */
+data class StreamExtras(val audioUri: String? = null, val userAgent: String? = null) {
+    companion object { val None = StreamExtras() }
 }
 
 /** Per-file user state recorded by the player. */

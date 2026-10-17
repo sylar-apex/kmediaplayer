@@ -8,6 +8,8 @@ import org.app.kmediaplayer.engine.EngineState
 import org.app.kmediaplayer.engine.FormatInfo
 import org.app.kmediaplayer.engine.TrackInfo
 import org.app.kmediaplayer.engine.TrackType
+import org.app.kmediaplayer.engine.vlcOptions
+import org.app.kmediaplayer.model.StreamExtras
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -24,9 +26,8 @@ internal interface VlcCallback {
 }
 
 /**
- * Plays one item at a time through libVLC. Used for whatever ExoPlayer cannot open: legacy
- * containers (WMV/ASF, RMVB, ...) and codecs the device has no decoder for. libVLC decodes with
- * FFmpeg in software when needed, using MediaCodec when [open] asks for hardware.
+ * Plays one item at a time through libVLC, the Android playback engine. libVLC decodes with MediaCodec
+ * when [open] asks for hardware and falls back to its FFmpeg decoders for everything else.
  */
 internal class VlcPlayback(private val context: Context, private val callback: VlcCallback) {
     private val libVlc: LibVLC by lazy { LibVLC(context, ArrayList(VlcOptions.libVlcArgs)) }
@@ -63,8 +64,11 @@ internal class VlcPlayback(private val context: Context, private val callback: V
     /** libVLC's software gain, 0..200 where above 100 amplifies. */
     private val appliedVolume: Int get() = (volume * boost * 100).toInt().coerceIn(0, 200)
 
-    /** Opens [uri] and seeks to [startMs]. [hardware] lets libVLC use MediaCodec; false forces FFmpeg. */
-    fun open(uri: String, startMs: Long, hardware: Boolean, playWhenReady: Boolean) {
+    /**
+     * Opens [uri] and seeks to [startMs]. [hardware] lets libVLC use MediaCodec; false forces FFmpeg.
+     * [extras] adds a separate audio stream and the User-Agent for network items.
+     */
+    fun open(uri: String, startMs: Long, hardware: Boolean, playWhenReady: Boolean, extras: StreamExtras = StreamExtras.None) {
         close()
         val mp = MediaPlayer(libVlc)
         mp.setEventListener(::onEvent)
@@ -72,6 +76,7 @@ internal class VlcPlayback(private val context: Context, private val callback: V
             setHWDecoderEnabled(hardware, false)
             if (startMs > 0) addOption(":start-time=${startMs / 1000.0}")
             VlcOptions.mediaOptions.forEach(::addOption)
+            extras.vlcOptions().forEach(::addOption)
         }
         mp.media = media
         media.release()

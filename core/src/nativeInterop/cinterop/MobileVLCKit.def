@@ -1,0 +1,3 @@
+language = Objective-C
+modules = MobileVLCKit
+package = org.videolan.vlckit

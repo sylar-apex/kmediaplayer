@@ -1,5 +1,7 @@
 package org.app.kmediaplayer.engine
 
+import org.app.kmediaplayer.model.StreamExtras
+
 /** Events from a [PlaybackBackend]. Backends may call these from any thread; see [QueuedMediaEngine]. */
 interface BackendCallback {
     fun onPlayingChanged(playing: Boolean)
@@ -27,8 +29,14 @@ interface PlaybackBackend {
     var speed: Float
     val effects: AudioEffectsController? get() = null
 
-    /** Opens [uri]; playback starts at [startMs] and only if [playWhenReady]. [decoder] SW forces software decoding where supported. */
-    fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder)
+    /**
+     * Opens [uri]; playback starts at [startMs] and only if [playWhenReady]. [decoder] SW forces software
+     * decoding where supported; [extras] carries a separate audio stream and the User-Agent for network items.
+     */
+    fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder, extras: StreamExtras)
+
+    /** Shorthand for an item without [StreamExtras]. */
+    fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder) = open(uri, startMs, playWhenReady, decoder, StreamExtras.None)
     fun play()
     fun pause()
     fun stop()

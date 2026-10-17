@@ -6,15 +6,14 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import org.app.kmediaplayer.engine.Decoder
-import org.app.kmediaplayer.model.MediaFormats
-import org.app.kmediaplayer.model.fileExtension
 
 /** Which backend plays an item. */
 internal enum class Backend { Exo, Vlc }
 
 /**
- * Decides when an item leaves ExoPlayer for libVLC. ExoPlayer stays first choice: it has the best
- * hardware integration, gapless audio and media-session support. libVLC covers the rest.
+ * Decides which backend plays an item. libVLC plays everything, as on iOS and desktop, so every format,
+ * gesture and setting behaves the same on all platforms; ExoPlayer only keeps the queue and the media
+ * session (notification, headset and lock-screen controls) that [HybridSessionPlayer] mirrors.
  */
 @OptIn(UnstableApi::class)
 internal object PlaybackRouter {
@@ -32,11 +31,8 @@ internal object PlaybackRouter {
         PlaybackException.ERROR_CODE_UNSPECIFIED,
     ).map(PlaybackException::getErrorCodeName).toSet()
 
-    fun route(uri: String, decoder: Decoder): Backend = when {
-        decoder == Decoder.SW -> Backend.Vlc
-        uri.fileExtension() in MediaFormats.legacyExtensions -> Backend.Vlc
-        else -> Backend.Exo
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun route(uri: String, decoder: Decoder): Backend = Backend.Vlc
 
     fun shouldFallBack(errorCodeName: String): Boolean = errorCodeName in fallbackErrors
 

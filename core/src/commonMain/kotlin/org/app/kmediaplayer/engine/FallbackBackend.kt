@@ -1,5 +1,7 @@
 package org.app.kmediaplayer.engine
 
+import org.app.kmediaplayer.model.StreamExtras
+
 /**
  * Plays each item with [primary] when [primaryHandles] says it can, otherwise with [secondary]; if
  * the primary fails on an item it is reopened in the secondary at the same position. On iOS the
@@ -22,7 +24,7 @@ class FallbackBackend(
 
     private var lastOpen: OpenRequest? = null
 
-    private data class OpenRequest(val uri: String, val startMs: Long, val playWhenReady: Boolean, val decoder: Decoder)
+    private data class OpenRequest(val uri: String, val startMs: Long, val playWhenReady: Boolean, val decoder: Decoder, val extras: StreamExtras)
 
     init { primary.callback = relay(primary) }
 
@@ -45,7 +47,7 @@ class FallbackBackend(
             val resumeAt = source.position.takeIf { it > 0 } ?: request.startMs
             source.stop()
             switchTo(fallback)
-            fallback.open(request.uri, resumeAt, request.playWhenReady, request.decoder)
+            fallback.open(request.uri, resumeAt, request.playWhenReady, request.decoder, request.extras)
         }
     }
 
@@ -57,13 +59,13 @@ class FallbackBackend(
         onActiveChanged?.invoke(backend)
     }
 
-    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder) {
-        lastOpen = OpenRequest(uri, startMs, playWhenReady, decoder)
+    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder, extras: StreamExtras) {
+        lastOpen = OpenRequest(uri, startMs, playWhenReady, decoder, extras)
         val usePrimary = decoder != Decoder.SW && primaryHandles(uri)
         val target = if (usePrimary) primary else secondaryBackend() ?: primary
         if (target !== active) active.stop()
         switchTo(target)
-        target.open(uri, startMs, playWhenReady, decoder)
+        target.open(uri, startMs, playWhenReady, decoder, extras)
     }
 
     override val isPlaying get() = active.isPlaying

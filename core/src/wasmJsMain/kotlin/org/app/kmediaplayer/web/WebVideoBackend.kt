@@ -1,5 +1,7 @@
 package org.app.kmediaplayer.web
 
+import org.app.kmediaplayer.model.StreamExtras
+
 import kotlinx.browser.document
 import org.app.kmediaplayer.engine.BackendCallback
 import org.app.kmediaplayer.engine.Decoder
@@ -61,7 +63,7 @@ class WebVideoBackend : PlaybackBackend {
     var currentId: String? = null
         private set
 
-    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder) {
+    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder, extras: StreamExtras) {
         this.playWhenReady = playWhenReady
         pendingSeekMs = startMs
         currentId = uri

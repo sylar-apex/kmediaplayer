@@ -1,5 +1,8 @@
 package org.app.kmediaplayer.desktop
 
+import org.app.kmediaplayer.model.StreamExtras
+import org.app.kmediaplayer.engine.vlcOptions
+
 import org.app.kmediaplayer.engine.AudioEffectsController
 import org.app.kmediaplayer.engine.BackendCallback
 import org.app.kmediaplayer.engine.Decoder
@@ -65,10 +68,11 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
         player.events().addMediaPlayerEventListener(Events())
     }
 
-    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder) {
+    override fun open(uri: String, startMs: Long, playWhenReady: Boolean, decoder: Decoder, extras: StreamExtras) {
         val options = buildList {
             if (startMs > 0) add(":start-time=${startMs / 1000.0}")
             if (decoder == Decoder.SW) add(":avcodec-hw=none")
+            addAll(extras.vlcOptions())
         }.toTypedArray()
         started = false
         pendingSeekMs = -1
