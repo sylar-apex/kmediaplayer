@@ -46,8 +46,22 @@ object VlcRuntime {
      * The libVLC the app ships with: `<resources>/vlc/lib` on macOS (plugins in `../plugins`, where libVLC
      * looks for them) or `<resources>/vlc` on Windows. Null when the app runs without bundled resources.
      */
+    /**
+     * Runs started outside Gradle's `run` task (e.g. an IDE run configuration) have no resources dir; use the
+     * copy `:desktopApp:prepareVlc` puts under `desktopApp/build/vlc-resources/<os>/vlc` in the project.
+     */
+    private fun devResources(): java.io.File? {
+        val os = System.getProperty("os.name").lowercase().let { if ("mac" in it) "macos" else if ("win" in it) "windows" else "linux" }
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir")).absoluteFile
+        while (dir != null) {
+            java.io.File(dir, "desktopApp/build/vlc-resources/$os/vlc").takeIf { it.isDirectory }?.let { return it }
+            dir = dir.parentFile
+        }
+        return null
+    }
+
     private fun bundledLibDir(): String? {
-        val vlc = System.getProperty("compose.application.resources.dir")?.let { java.io.File(it, "vlc") } ?: return null
+        val vlc = System.getProperty("compose.application.resources.dir")?.let { java.io.File(it, "vlc") } ?: devResources() ?: return null
         return listOf(java.io.File(vlc, "lib"), vlc).firstOrNull { dir ->
             dir.listFiles()?.any { it.name.startsWith("libvlc.") } == true
         }?.absolutePath
