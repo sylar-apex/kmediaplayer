@@ -25,8 +25,7 @@ object VlcRuntime {
         "--no-plugins-scan",
     )
 
-    /** The libVLC factory, or null when VLC is not installed. */
-    val factory: MediaPlayerFactory? by lazy {
+    private val loader = lazy {
         runCatching {
             val started = System.currentTimeMillis()
             (System.getProperty("vlc.path") ?: bundledLibDir())?.let { System.setProperty("jna.library.path", it) }
@@ -40,7 +39,14 @@ object VlcRuntime {
         }.onFailure { System.err.println("libVLC unavailable: $it") }.getOrNull()
     }
 
-    val isAvailable: Boolean get() = factory != null
+    /** The libVLC factory, or null when VLC is not installed. Blocks while libVLC loads: never call it on the UI thread. */
+    val factory: MediaPlayerFactory? get() = loader.value
+
+    /**
+     * Never blocks: true while libVLC is still loading (it ships with the app), then whether it loaded.
+     * Callers that go on to use [factory] must do so off the UI thread.
+     */
+    val isAvailable: Boolean get() = !loader.isInitialized() || loader.value != null
 
     /**
      * The libVLC the app ships with: `<resources>/vlc/lib` on macOS (plugins in `../plugins`, where libVLC
