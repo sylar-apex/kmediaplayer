@@ -28,13 +28,18 @@ object VlcRuntime {
     private val loader = lazy {
         runCatching {
             val started = System.currentTimeMillis()
-            (System.getProperty("vlc.path") ?: bundledLibDir())?.let { System.setProperty("jna.library.path", it) }
+            val libDir = System.getProperty("vlc.path") ?: bundledLibDir()
+            libDir?.let { System.setProperty("jna.library.path", it) }
             if (!NativeDiscovery().discover()) {
                 System.err.println("libVLC not found or wrong architecture (${System.getProperty("os.arch")}): the bundled libVLC is missing (run :desktopApp:prepareVlc), or pass -Dvlc.path")
                 return@runCatching null
             }
             // `-Dvlc.verbose` prints libVLC's own log for diagnosing a file that will not play.
-            MediaPlayerFactory(if (System.getProperty("vlc.verbose") != null) args - "--quiet" + "-vv" else args)
+            val stamp = libDir?.let(::pluginCacheStamp)
+            val rebuild = stamp != null && stamp.second != runCatching { stamp.first.readText() }.getOrNull()
+            val base = if (rebuild) args - "--no-plugins-scan" + "--reset-plugins-cache" else args
+            MediaPlayerFactory(if (System.getProperty("vlc.verbose") != null) base - "--quiet" + "-vv" else base)
+                .also { if (rebuild) runCatching { stamp!!.first.writeText(stamp.second) } }
                 .also { println("libVLC ${it.application().version()} ready in ${System.currentTimeMillis() - started} ms") }
         }.onFailure { System.err.println("libVLC unavailable: $it") }.getOrNull()
     }
@@ -47,6 +52,22 @@ object VlcRuntime {
      * Callers that go on to use [factory] must do so off the UI thread.
      */
     val isAvailable: Boolean get() = !loader.isInitialized() || loader.value != null
+
+    /**
+     * Copying the app (Gradle resources, installers) rewrites file times, so the shipped plugins.dat looks
+     * stale and libVLC dlopens every plugin at each start. The stamp records the plugins' times as of the last
+     * cache rebuild; when they differ, libVLC rebuilds plugins.dat once and later starts read it directly.
+     * Null when the plugins folder is missing or read-only.
+     */
+    private fun pluginCacheStamp(libDir: String): Pair<java.io.File, String>? {
+        val plugins = listOf(java.io.File(libDir, "../plugins"), java.io.File(libDir, "plugins"))
+            .map { it.canonicalFile }.firstOrNull { it.isDirectory && it.canWrite() } ?: return null
+        val times = plugins.listFiles { f -> f.name != "plugins.dat" && f.name != STAMP }.orEmpty()
+            .sortedBy { it.name }.joinToString("\n") { "${it.name} ${it.lastModified()}" }
+        return java.io.File(plugins, STAMP) to times.hashCode().toString()
+    }
+
+    private const val STAMP = "plugins.stamp"
 
     /**
      * The libVLC the app ships with: `<resources>/vlc/lib` on macOS (plugins in `../plugins`, where libVLC
