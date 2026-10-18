@@ -1,5 +1,6 @@
 package org.app.kmediaplayer.ui.music
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -114,7 +115,8 @@ fun MiniPlayer(addToPlaylist: AddToPlaylistSlot? = null) {
     if (player.itemCount == 0) return
     val file = queue.getOrNull(index)
     val title = file?.title ?: player.title.orEmpty()
-    val artist = file?.artist?.takeIf { it.isNotBlank() && it != "Unknown" } ?: "Unknown artist"
+    // No artist known (downloads): show nothing rather than "Unknown artist".
+    val artist = file?.artist?.takeIf { it.isNotBlank() && it != "Unknown" }.orEmpty()
     val seed = file?.album?.takeIf { it.isNotBlank() && it != "Unknown" } ?: title
     val progress = if (dur > 0) pos.toFloat() / dur else 0f
     val colors = MaterialTheme.colorScheme
@@ -128,7 +130,7 @@ fun MiniPlayer(addToPlaylist: AddToPlaylistSlot? = null) {
                     Spacer(Modifier.width(12.dp))
                     TitleBlock(title, artist, Modifier.weight(1f))
                     PlayButton(playing, 40.dp) { player.togglePlayback() }
-                    IconButton({ player.seekToNext() }) { Icon(Icons.Default.SkipNext, "Next") }
+                    IconButton({ player.seekToNext() }) { Icon(Icons.Default.SkipNext, "Next", tint = MaterialTheme.colorScheme.onSurface) }
                 }
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(progress.coerceIn(0f, 1f)).height(2.dp).background(colors.primary))
             }
@@ -150,9 +152,9 @@ fun MiniPlayer(addToPlaylist: AddToPlaylistSlot? = null) {
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 IconButton({ player.shuffleEnabled = !shuffle }) { Icon(Icons.Default.Shuffle, "Shuffle", Modifier.size(20.dp), tint = if (shuffle) colors.primary else colors.onSurfaceVariant) }
-                IconButton({ player.seekToPrevious() }) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(28.dp)) }
+                IconButton({ player.seekToPrevious() }) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(28.dp), tint = colors.onSurface) }
                 PlayButton(playing, 48.dp) { player.togglePlayback() }
-                IconButton({ player.seekToNext() }) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(28.dp)) }
+                IconButton({ player.seekToNext() }) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(28.dp), tint = colors.onSurface) }
                 IconButton({ player.repeatMode = when (repeat) { RepeatMode.Off -> RepeatMode.All; RepeatMode.All -> RepeatMode.One; else -> RepeatMode.Off } }) {
                     Icon(if (repeat == RepeatMode.One) Icons.Default.RepeatOne else Icons.Default.Repeat, "Repeat", Modifier.size(20.dp), tint = if (repeat != RepeatMode.Off) colors.primary else colors.onSurfaceVariant)
                 }
@@ -176,8 +178,8 @@ fun MiniPlayer(addToPlaylist: AddToPlaylistSlot? = null) {
 @Composable
 private fun TitleBlock(title: String, artist: String, modifier: Modifier) {
     Column(modifier) {
-        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        Text(artist, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+        if (artist.isNotEmpty()) Text(artist, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -185,6 +187,6 @@ private fun TitleBlock(title: String, artist: String, modifier: Modifier) {
 private fun PlayButton(playing: Boolean, size: Dp, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(Modifier.size(size).clip(CircleShape).background(colors.primary).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(size * 0.55f), tint = colors.onPrimary)
+        Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(size * 0.55f), tint = Color.White)
     }
 }

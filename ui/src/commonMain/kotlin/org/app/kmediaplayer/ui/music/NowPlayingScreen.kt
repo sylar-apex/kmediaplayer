@@ -152,7 +152,8 @@ fun NowPlayingScreen(addToPlaylist: AddToPlaylistSlot? = null, onClose: () -> Un
                 .background(Brush.radialGradient(listOf(glow2.copy(alpha = 0.16f), Color.Transparent), center = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY), radius = 1600f)),
         ) {
             val wide = maxWidth >= 840.dp && maxHeight >= 480.dp
-            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            // LocalWindowTopInset: room for window controls drawn over the content (macOS title bar).
+            Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = LocalWindowTopInset.current).navigationBarsPadding()) {
                 Header(file, player, wide, onClose)
                 if (wide) {
                     Row(Modifier.fillMaxWidth().weight(1f).padding(start = 40.dp, end = 24.dp, top = 8.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
@@ -476,3 +477,6 @@ private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
         Text(label, color = Color.White, fontSize = 15.sp)
     }
 }
+
+/** Space the host keeps clear at the window top (e.g. 28dp under macOS traffic lights in a transparent title bar). */
+val LocalWindowTopInset = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }

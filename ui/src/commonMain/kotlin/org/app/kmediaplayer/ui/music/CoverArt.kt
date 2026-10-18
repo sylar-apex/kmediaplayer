@@ -55,6 +55,13 @@ fun coverColors(seed: String): Pair<Color, Color> = palettes[abs(seed.lowercase(
 /** Generated cover art: a gradient tile with a music note, coloured from [seed]. */
 @Composable
 fun CoverArt(seed: String, modifier: Modifier = Modifier, corner: Dp = 8.dp) {
+    // A seed that is an image URL (a download's thumbnail) is shown as the cover itself.
+    if (seed.startsWith("http")) {
+        Box(modifier.clip(RoundedCornerShape(corner)).background(Color(0xFF2A2A2E))) {
+            coil3.compose.AsyncImage(seed, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        }
+        return
+    }
     val (a, b) = coverColors(seed)
     Box(
         modifier.clip(RoundedCornerShape(corner)).background(Brush.linearGradient(listOf(a, b))),

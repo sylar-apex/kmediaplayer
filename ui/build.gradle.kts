@@ -54,6 +54,8 @@ kotlin {
             api(libs.compose.material3)
             api(libs.compose.components.resources)
             implementation(libs.compose.materialIconsExtended)
+            // Cover art from a remote thumbnail (downloaded YouTube media carries one).
+            implementation(libs.coil.compose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
         }
         androidMain.dependencies {
