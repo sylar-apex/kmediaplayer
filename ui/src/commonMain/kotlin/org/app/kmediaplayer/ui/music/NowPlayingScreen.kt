@@ -154,11 +154,17 @@ fun NowPlayingScreen(addToPlaylist: AddToPlaylistSlot? = null, onClose: () -> Un
             val wide = maxWidth >= 840.dp && maxHeight >= 480.dp
             // LocalWindowTopInset: room for window controls drawn over the content (macOS title bar).
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = LocalWindowTopInset.current).navigationBarsPadding()) {
-                Header(file, player, wide, onClose)
+                if (!wide) Header(file, player, wide, onClose)
                 if (wide) {
-                    Row(Modifier.fillMaxWidth().weight(1f).padding(start = 40.dp, end = 24.dp, top = 8.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                    // Wide: no header row; Back and Share sit above the cover, the queue gets the full height.
+                    Row(Modifier.fillMaxWidth().weight(1f).padding(start = 40.dp, end = 24.dp, top = 12.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(40.dp)) {
                         Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                             Column(Modifier.widthIn(max = 440.dp)) {
+                                Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    BackPill(onClose)
+                                    Spacer(Modifier.weight(1f))
+                                    GlassButton(painterResource(Res.drawable.ic_ov_share), "Share") { file?.let { PlatformMedia.share(listOf(it)) } ?: Unit }
+                                }
                                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Artwork(seed, playing, Modifier.widthIn(max = 330.dp)) }
                                 Spacer(Modifier.height(28.dp))
                                 Controls(file, player, playing, shuffle, repeat, ab, addToPlaylist != null, onSheet = { sheet = it }, showQueueButton = false)
@@ -213,14 +219,7 @@ private class AbRepeat {
 @Composable
 private fun Header(file: MediaFile?, player: MediaEngine, wide: Boolean, onClose: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(
-            Modifier.height(38.dp).clip(CircleShape).background(Color(0x14FFFFFF)).clickable(onClick = onClose).padding(start = 10.dp, end = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", Modifier.size(20.dp), tint = Color.White)
-            Spacer(Modifier.width(6.dp))
-            Text("Back", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        }
+        BackPill(onClose)
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("NOW PLAYING", color = Dim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
             val from = file?.album?.takeIf { it.isNotBlank() && it != "Unknown" } ?: file?.folderName
@@ -480,3 +479,15 @@ private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 
 /** Space the host keeps clear at the window top (e.g. 28dp under macOS traffic lights in a transparent title bar). */
 val LocalWindowTopInset = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
+@Composable
+private fun BackPill(onClose: () -> Unit) {
+    Row(
+        Modifier.height(38.dp).clip(CircleShape).background(Color(0x14FFFFFF)).clickable(onClick = onClose).padding(start = 10.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", Modifier.size(20.dp), tint = Color.White)
+        Spacer(Modifier.width(6.dp))
+        Text("Back", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}

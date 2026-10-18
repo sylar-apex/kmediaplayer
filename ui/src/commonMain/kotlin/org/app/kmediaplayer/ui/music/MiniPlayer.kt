@@ -1,5 +1,6 @@
 package org.app.kmediaplayer.ui.music
 
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -131,6 +132,7 @@ fun MiniPlayer(addToPlaylist: AddToPlaylistSlot? = null) {
                     TitleBlock(title, artist, Modifier.weight(1f))
                     PlayButton(playing, 40.dp) { player.togglePlayback() }
                     IconButton({ player.seekToNext() }) { Icon(Icons.Default.SkipNext, "Next", tint = MaterialTheme.colorScheme.onSurface) }
+                    IconButton({ player.stop(); player.clearItems(); KMediaPlayer.queue.value = emptyList() }) { Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(progress.coerceIn(0f, 1f)).height(2.dp).background(colors.primary))
             }
@@ -170,6 +172,10 @@ fun MiniPlayer(addToPlaylist: AddToPlaylistSlot? = null) {
                 }
                 ThinSlider(volume, Modifier.width(100.dp), colors.primary, colors.onSurface.copy(alpha = 0.12f),
                     onChange = { volume = it; player.volume = it }) { volume = it; player.volume = it }
+                // Close: stop playback and clear the queue, which hides this bar.
+                IconButton({ player.stop(); player.clearItems(); KMediaPlayer.queue.value = emptyList() }, Modifier.padding(start = 6.dp).size(32.dp)) {
+                    Icon(Icons.Default.Close, "Close", Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                }
             }
         }
     }
