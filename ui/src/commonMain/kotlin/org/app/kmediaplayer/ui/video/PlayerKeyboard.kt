@@ -81,7 +81,10 @@ internal object PlayerKeyboard {
 
     private fun seek(st: VideoPlayerState, deltaMs: Long) {
         st.seekBy(deltaMs)
-        st.tapSeekOsd = (if (deltaMs > 0) 1 else -1) to (kotlin.math.abs(deltaMs) / 1000).toInt()
+        // Repeated presses the same way add up in the badge: 10s, 20s, 30s…
+        val dir = if (deltaMs > 0) 1 else -1
+        val prev = st.tapSeekOsd?.takeIf { it.first == dir }?.second ?: 0
+        st.tapSeekOsd = dir to prev + (kotlin.math.abs(deltaMs) / 1000).toInt()
     }
 
     private fun volume(st: VideoPlayerState, delta: Int) {

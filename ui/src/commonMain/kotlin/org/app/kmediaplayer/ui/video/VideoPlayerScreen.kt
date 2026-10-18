@@ -480,23 +480,15 @@ private fun OsdPill(icon: DrawableResource, text: String, modifier: Modifier) {
 
 @Composable
 private fun TapSeekOsd(dir: Int, seconds: Int) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val w = constraints.maxWidth.toFloat()
-        val h = constraints.maxHeight.toFloat()
-        val r = h * 0.7f
-        val inset = with(LocalDensity.current) { 11.dp.toPx() }
-        val cx = if (dir > 0) w - inset else inset
-        Canvas(Modifier.fillMaxSize()) { drawCircle(Color(0x4D000000), r, Offset(cx, h / 2)) }
-        val visible = with(LocalDensity.current) { (r - inset).toDp() }
-        Box(Modifier.align(if (dir > 0) Alignment.CenterEnd else Alignment.CenterStart).width(visible), contentAlignment = Alignment.Center) {
-            // A compact badge: on the web only this small area is cut out of the video.
-            Column(
-                Modifier.videoCutout().background(Color(0x99000000), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(painterResource(if (dir > 0) Res.drawable.ic_pl_ff else Res.drawable.ic_pl_rew), null, Modifier.size(18.dp), tint = Color.White)
-                Text("${seconds}s", color = Color.White, fontSize = 15.sp)
-            }
+    // Only a small, soft badge on the seek side: no shaded half-circle, so fast repeated seeks never flash the picture.
+    Box(Modifier.fillMaxSize().padding(horizontal = 48.dp), contentAlignment = if (dir > 0) Alignment.CenterEnd else Alignment.CenterStart) {
+        Row(
+            Modifier.videoCutout().background(Color(0x59000000), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(painterResource(if (dir > 0) Res.drawable.ic_pl_ff else Res.drawable.ic_pl_rew), null, Modifier.size(14.dp), tint = Color(0xE6FFFFFF))
+            Spacer(Modifier.width(6.dp))
+            Text("${seconds}s", color = Color(0xE6FFFFFF), fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -590,7 +582,9 @@ private fun Controls(window: PlayerWindow, portrait: Boolean) {
     val frame = Color(s[PlayerKeys.frameColor])
     val transportWidth = if (portrait) 50.dp else 90.dp
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxWidth().videoCutout().background(Brush.verticalGradient(listOf(frame, Color.Transparent))).safeDrawingPadding()) {
+        Column(Modifier.fillMaxWidth().videoCutout().background(Brush.verticalGradient(listOf(frame, Color.Transparent))).safeDrawingPadding()
+            // Room for window controls drawn over the player (macOS traffic lights).
+            .padding(top = org.app.kmediaplayer.ui.music.LocalWindowTopInset.current)) {
             Row(Modifier.height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 CtlButton({ window.close() }, 56.dp, 56.dp) { Ic(Res.drawable.ic_back, "Navigate up", tint) }
                 Spacer(Modifier.width(16.dp))
