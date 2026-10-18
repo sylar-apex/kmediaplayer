@@ -25,8 +25,8 @@ import org.app.kmediaplayer.util.formatDecimal
  * | M | mute |
  * | F | full screen |
  * | Esc | close panel, leave full screen |
- * | Cmd/Ctrl + N, Shift + N | next video |
- * | Cmd/Ctrl + P, Shift + P | previous video |
+ * | Cmd/Ctrl + →, Cmd/Ctrl + N, Shift + N | next video |
+ * | Cmd/Ctrl + ←, Cmd/Ctrl + P, Shift + P | previous video |
  * | [ / ] | slower / faster, \\ resets speed |
  * | 0 – 9 | jump to 0 % … 90 % |
  * | Home / End | start / end |
@@ -49,8 +49,8 @@ internal object PlayerKeyboard {
         if (st.locked) return false
         val handled = when (event.key) {
             Key.Spacebar, Key.K -> { st.togglePlay(); true }
-            Key.DirectionLeft -> { seek(st, -(if (event.isShiftPressed) LONG_SEEK_MS else moveMs())); true }
-            Key.DirectionRight -> { seek(st, if (event.isShiftPressed) LONG_SEEK_MS else moveMs()); true }
+            Key.DirectionLeft -> { if (command) st.previous() else seek(st, -(if (event.isShiftPressed) LONG_SEEK_MS else moveMs())); true }
+            Key.DirectionRight -> { if (command) st.next() else seek(st, if (event.isShiftPressed) LONG_SEEK_MS else moveMs()); true }
             Key.J -> { seek(st, -SHORT_SEEK_MS); true }
             Key.L -> { seek(st, SHORT_SEEK_MS); true }
             Key.DirectionUp -> { if (command) brightness(window, +BRIGHTNESS_STEP) else volume(st, +1); true }
