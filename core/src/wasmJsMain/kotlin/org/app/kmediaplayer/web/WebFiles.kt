@@ -13,12 +13,15 @@ import org.w3c.files.File
 object WebFiles {
     const val SCHEME = "webfs://"
 
-    private class Entry(val url: String, val size: Double, val modified: Double)
+    private class Entry(val url: String, val size: Double, val modified: Double, val file: File)
 
     private val entries = mutableMapOf<String, Entry>()
 
     /** Live URL for [id] (or [id] itself when it is not a local file). */
     fun resolve(id: String): String = entries[id]?.url ?: id
+
+    /** The picked file behind [id], for reading its header; null for streams. */
+    fun file(id: String): File? = entries[id]?.file
 
     fun isLocal(id: String): Boolean = id.startsWith(SCHEME)
     fun isAvailable(id: String): Boolean = id in entries
@@ -31,7 +34,7 @@ object WebFiles {
             if (old.size == size && old.modified == modified) return old.url
             release(id)
         }
-        return URL.createObjectURL(file).also { entries[id] = Entry(it, size, modified) }
+        return URL.createObjectURL(file).also { entries[id] = Entry(it, size, modified, file) }
     }
 
     /** Frees every URL whose ID is not in [keep], except the file playing right now. */

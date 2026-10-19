@@ -301,10 +301,17 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 @Composable
 private fun AudioPanel(window: PlayerWindow) {
     val st = window.state
+    val help = remember { PlatformVideoTools.audioTrackHelp() }
+    var showHelp by remember { mutableStateOf(false) }
+    if (help != null && showHelp) return AudioTrackHelpPanel(help) { showHelp = false }
     PanelTitle("Audio Track")
     Scroll {
-        st.audioTracks.forEach { t -> RadioRow(t.label, t.selected) { st.selectTrack(t, TrackType.Audio) } }
-        RadioRow("Disable", st.audioTracks.none { it.selected }) { st.disableAudio() }
+        st.audioTracks.forEach { t ->
+            RadioRow(t.label, t.selected) { if (help != null) { if (!t.selected) showHelp = true } else st.selectTrack(t, TrackType.Audio) }
+        }
+        if (st.audioTracks.isEmpty()) PanelRow("No audio tracks found", enabled = false) {}
+        // Muting a track needs the same browser support as switching, so it is offered only where switching works.
+        if (help == null) RadioRow("Disable", st.audioTracks.none { it.selected }) { st.disableAudio() }
         // External audio files, stereo mode and audio sync are not implemented on any platform, so they are not offered.
         if (PlayerCapabilities.decoderChoice) CheckRow("Use SW audio decoder", st.decoder == Decoder.SW, height = 42.dp) { st.setDecoderMode(if (st.decoder == Decoder.SW) Decoder.HW else Decoder.SW) }
     }
@@ -917,5 +924,35 @@ private fun CustomisePanel() {
                 Text(sc.label, color = Color.White)
             }
         }
+    }
+}
+
+/** Steps to turn on audio-track switching in a browser that plays only the first track. */
+@Composable
+private fun AudioTrackHelpPanel(help: AudioTrackHelp, onBack: () -> Unit) {
+    var message by remember { mutableStateOf<String?>(null) }
+    PanelTitle("Switch audio in ${help.browser}", onBack = onBack)
+    Scroll {
+        Spacer(Modifier.height(12.dp))
+        Text("${help.browser} plays only the first audio track until one setting is turned on. Do this once:",
+            color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        help.steps.forEachIndexed { i, step ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Box(Modifier.size(22.dp).background(Color(0x26FFFFFF), CircleShape), contentAlignment = Alignment.Center) {
+                    Text("${i + 1}", color = Color.White, fontSize = 12.sp)
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(step, Modifier.weight(1f), color = Color.White, fontSize = 13.sp)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(
+            Modifier.fillMaxWidth().height(40.dp).background(Color.White, RoundedCornerShape(20.dp))
+                .clickable { message = help.openSettings() },
+            contentAlignment = Alignment.Center,
+        ) { Text("Open settings", color = Color.Black, fontSize = 14.sp) }
+        Spacer(Modifier.height(8.dp))
+        Text(message ?: help.settingsLink, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
     }
 }

@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +72,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import kotlin.math.exp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -156,6 +159,8 @@ private fun VideoPlayerContent(window: PlayerWindow) {
     val st = window.state
     settingsVersion()
     val s = KMediaPlayer.settings
+    // Window-level input (trackpad pinch on macOS) zooms whichever player is on screen.
+    DisposableEffect(st) { ZoomInput.target = st; onDispose { if (ZoomInput.target === st) ZoomInput.target = null } }
     LaunchedEffect(st.finishRequested) { if (st.finishRequested) window.close() }
     LaunchedEffect(st.controlsVisible, st.panel, st.locked) { window.showSystemBars(st.controlsVisible && !st.locked && (st.panel == Panel.None || st.panel == Panel.AbRepeat)) }
     LaunchedEffect(st.panel) { if (st.panel == Panel.None) st.scheduleHide() }
@@ -190,9 +195,12 @@ private fun VideoPlayerContent(window: PlayerWindow) {
         val vw = with(density) { fitted.width.toDp() }
         val vh = with(density) { fitted.height.toDp() }
 
+        // The web video is an HTML element over the canvas: it zooms itself, since a Compose layer cannot scale it.
+        LaunchedEffect(st.pinchScale, st.panX, st.panY) { PlatformVideoTools.setPictureTransform(st.pinchScale, st.panX, st.panY) }
         window.VideoSurface(
-            Modifier.align(Alignment.Center).size(vw, vh).graphicsLayer {
-                scaleX = st.pinchScale; scaleY = st.pinchScale; translationX = st.panX; translationY = st.panY
+            Modifier.align(Alignment.Center).size(vw, vh).let { m ->
+                if (videoNeedsCutouts) m
+                else m.graphicsLayer { scaleX = st.pinchScale; scaleY = st.pinchScale; translationX = st.panX; translationY = st.panY }
             },
         )
 
@@ -317,7 +325,21 @@ private fun GestureLayer(window: PlayerWindow, width: Float, height: Float) {
     var pendingTap by remember { mutableStateOf<Job?>(null) }
     var tapSeekJob by remember { mutableStateOf<Job?>(null) }
 
-    Box(Modifier.fillMaxSize().pointerInput(width, height) {
+    Box(Modifier.fillMaxSize().pointerInput(Unit) {
+        // Mouse wheel (and trackpad two-finger scroll): wheel up zooms in, wheel down zooms out.
+        awaitPointerEventScope {
+            while (true) {
+                val ev = awaitPointerEvent()
+                if (ev.type != PointerEventType.Scroll) continue
+                val dy = ev.changes.fold(0f) { acc, c -> acc + c.scrollDelta.y }
+                if (dy != 0f) {
+                    // Capped per event so a burst of large deltas (fast wheel spin) cannot jump straight to 25 % or 400 %.
+                    st.zoomBy(exp(-dy * wheelZoomStep).coerceIn(0.8f, 1.25f))
+                    ev.changes.forEach { it.consume() }
+                }
+            }
+        }
+    }.pointerInput(width, height) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val start = down.position
