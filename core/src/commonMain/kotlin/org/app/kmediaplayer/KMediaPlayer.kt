@@ -51,6 +51,12 @@ object KMediaPlayer {
 
     val engine: MediaEngine get() = PlatformMedia.engine()
 
+    /**
+     * False while the platform is still loading its playback libraries (libVLC on desktop). Touching [engine]
+     * before then blocks, so hosts show a loading player until it turns true.
+     */
+    val engineReady = MutableStateFlow(true)
+
     /** True while the full player is shown after [expandVideo]; an inline player takes over again when it turns false. */
     val fullPlayerOpen = MutableStateFlow(false)
 

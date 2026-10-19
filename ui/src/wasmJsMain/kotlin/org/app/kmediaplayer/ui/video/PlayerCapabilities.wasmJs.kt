@@ -1,9 +1,10 @@
 package org.app.kmediaplayer.ui.video
 
-/** Browsers expose no audio effects, audio-track switching or decoder choice to web pages. */
+/** Browsers expose no audio effects or decoder choice to web pages. */
 actual object PlayerCapabilities {
     actual val equalizer = false
-    actual val audioTrackSelection = false
+    /** Tracks are listed everywhere: natively where supported, otherwise from the file header (see [PlatformVideoTools.audioTrackHelp]). */
+    actual val audioTrackSelection = true
     actual val decoderChoice = false
     actual val backgroundPlay = false
     actual val screenRotation = false
@@ -16,3 +17,5 @@ actual object PlayerCapabilities {
 
 @JsFun("() => !!document.pictureInPictureEnabled")
 private external fun pictureInPictureEnabled(): Boolean
+
+internal actual val wheelZoomStep: Float = 0.001f

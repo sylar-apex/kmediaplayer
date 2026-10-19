@@ -73,7 +73,6 @@ internal object PlayerKeyboard {
             Key.C -> { st.toggleSubtitles(); true }
             else -> digit(event.key)?.let { d -> st.seekTo(st.duration * d / 10); true } ?: false
         }
-        if (handled && st.panel == Panel.None) st.showControls()
         return handled
     }
 

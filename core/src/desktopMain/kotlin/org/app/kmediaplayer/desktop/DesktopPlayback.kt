@@ -1,5 +1,6 @@
 package org.app.kmediaplayer.desktop
 
+import org.app.kmediaplayer.KMediaPlayer
 import org.app.kmediaplayer.engine.MediaEngine
 import org.app.kmediaplayer.engine.QueueEngine
 import org.app.kmediaplayer.engine.QueuedMediaEngine
@@ -12,5 +13,13 @@ object DesktopPlayback {
 
     val engine: MediaEngine by lazy {
         backend?.let { QueuedMediaEngine(it) { block -> SwingUtilities.invokeLater(block) } } ?: QueueEngine()
+    }
+
+    /** Loads libVLC off the UI thread at startup; [KMediaPlayer.engineReady] stays false until it is done. */
+    fun warmUp() {
+        KMediaPlayer.engineReady.value = false
+        Thread({
+            try { engine } finally { KMediaPlayer.engineReady.value = true }
+        }, "libvlc-init").apply { isDaemon = true }.start()
     }
 }

@@ -13,10 +13,15 @@ import org.jetbrains.skia.ImageInfo
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import java.lang.reflect.Proxy
+import javax.swing.JComponent
 import java.text.SimpleDateFormat
 import java.util.Date
 
 actual object PlatformVideoTools {
+    actual fun audioTrackHelp(): AudioTrackHelp? = null
+    actual fun setPictureTransform(scale: Float, panX: Float, panY: Float) {}
+
     /** Read by the desktop video surface when drawing frames. */
     var brightness by mutableFloatStateOf(1f)
         private set
@@ -26,6 +31,35 @@ actual object PlatformVideoTools {
 
     private var fullscreen by mutableStateOf(false)
     actual val isFullscreen: Boolean get() = fullscreen
+
+    /**
+     * Routes the macOS trackpad pinch on [root] to the player's zoom. AWT reports it only through the
+     * non-exported `com.apple.eawt.event` API, so the app runs with
+     * `--add-exports java.desktop/com.apple.eawt.event=ALL-UNNAMED`; without that (or off macOS) this does nothing.
+     */
+    fun installPinchZoom(root: JComponent) {
+        if (!System.getProperty("os.name").orEmpty().startsWith("Mac")) return
+        runCatching {
+            val pkg = "com.apple.eawt.event"
+            val magnification = Class.forName("$pkg.MagnificationListener")
+            val listener = Proxy.newProxyInstance(magnification.classLoader, arrayOf(magnification)) { proxy, method, args ->
+                when (method.name) {
+                    "magnify" -> {
+                        val amount = args[0].javaClass.getMethod("getMagnification").invoke(args[0]) as Double
+                        ZoomInput.target?.zoomBy((1 + amount).toFloat())
+                        null
+                    }
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "equals" -> proxy === args[0]
+                    "toString" -> "PinchZoom"
+                    else -> null
+                }
+            }
+            Class.forName("$pkg.GestureUtilities")
+                .getMethod("addGestureListenerTo", JComponent::class.java, Class.forName("$pkg.GestureListener"))
+                .invoke(null, root, listener)
+        }.onFailure { System.err.println("Trackpad pinch zoom unavailable: $it") }
+    }
 
     /** Called by the app window whenever its placement changes. */
     fun onFullscreenChanged(value: Boolean) { fullscreen = value }

@@ -234,7 +234,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         resumeCheckedFor = f.uri
         val rec = host.playbackRecord(f.uri) ?: return
         when (ResumePolicy.decide(settings[PlayerKeys.resume], rec.positionMs, engine.duration, index == firstIndex, settings[PlayerKeys.resumeOnlyFirst])) {
-            ResumeDecision.Resume -> { engine.seekTo(rec.positionMs); resumeNotice = rec.positionMs; showControls() }
+            ResumeDecision.Resume -> { engine.seekTo(rec.positionMs); resumeNotice = rec.positionMs }
             ResumeDecision.Ask -> { engine.pause(); resumePrompt = rec.positionMs }
             ResumeDecision.StartOver -> {}
         }
@@ -311,6 +311,20 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     }
 
     fun setTemporarySpeed(v: Float?) { tempSpeed = v; engine.speed = v ?: speed }
+
+    private var zoomLabelJob: Job? = null
+
+    /**
+     * Scales the picture by [factor] the way a two-finger pinch does; desktops call it for the mouse wheel and
+     * trackpad pinch, which never reach the touch gesture code.
+     */
+    fun zoomBy(factor: Float) {
+        if (locked || !(settings[PlayerKeys.gZoom] || settings[PlayerKeys.gZoomAndPan])) return
+        pinchScale = (pinchScale * factor).coerceIn(0.25f, 4f)
+        gestureLabel = "${(pinchScale * 100).toInt()}%"
+        zoomLabelJob?.cancel()
+        zoomLabelJob = scope.launch { delay(600); gestureLabel = null }
+    }
 
     fun cycleZoom() {
         zoom = zoom.next(); pinchScale = 1f; panX = 0f; panY = 0f

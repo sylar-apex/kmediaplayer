@@ -32,8 +32,14 @@ actual fun PlatformVideoSurface(modifier: Modifier) {
     // Browsers send keys to the focused element; focus the app canvas so shortcuts work without a click first.
     LaunchedEffect(Unit) { focusComposeCanvas() }
     LaunchedEffect(element, cutouts) {
-        snapshotFlow { bounds to cutouts?.rects?.values?.toList().orEmpty() }
-            .collect { (box, holes) -> element.style.setProperty("clip-path", clipPath(box, holes)) }
+        snapshotFlow { Triple(bounds, cutouts?.rects?.values?.toList().orEmpty(), PlatformVideoTools.pictureTransform) }
+            .collect { (box, holes, t) ->
+                val ratio = window.devicePixelRatio.toFloat()
+                element.style.setProperty("transform-origin", "50% 50%")
+                element.style.setProperty("transform",
+                    if (t == PictureTransform()) "none" else "translate(${t.panX / ratio}px, ${t.panY / ratio}px) scale(${t.scale})")
+                element.style.setProperty("clip-path", clipPath(box, holes, t))
+            }
     }
     HtmlElementView(
         factory = { element },
@@ -46,17 +52,22 @@ actual val videoNeedsCutouts: Boolean = true
 
 /**
  * The video's own rectangle minus every overlay, as an even-odd CSS path in the element's
- * coordinates (CSS pixels; Compose reports device pixels).
+ * coordinates (CSS pixels; Compose reports device pixels). Clip paths are drawn before the
+ * element's zoom transform, so on-screen rectangles are mapped back through it: the picture stays
+ * inside its box and overlays stay cut out at any zoom.
  */
-private fun clipPath(box: Rect, holes: List<Rect>): String {
+private fun clipPath(box: Rect, holes: List<Rect>, t: PictureTransform): String {
     if (box.isEmpty) return "none"
     val ratio = window.devicePixelRatio.toFloat()
     val w = box.width / ratio
     val h = box.height / ratio
-    val path = StringBuilder("M0,0 H$w V$h H0 Z")
+    // screen = centre + pan + scale * (local - centre)  ⇒  local = centre + (screen - centre - pan) / scale
+    fun lx(x: Float) = w / 2 + (x - w / 2 - t.panX / ratio) / t.scale
+    fun ly(y: Float) = h / 2 + (y - h / 2 - t.panY / ratio) / t.scale
+    val path = StringBuilder("M${lx(0f)},${ly(0f)} H${lx(w)} V${ly(h)} H${lx(0f)} Z")
     holes.mapNotNull { it.intersectOrNull(box) }.forEach { r ->
-        val x1 = (r.left - box.left) / ratio; val y1 = (r.top - box.top) / ratio
-        val x2 = (r.right - box.left) / ratio; val y2 = (r.bottom - box.top) / ratio
+        val x1 = lx((r.left - box.left) / ratio); val y1 = ly((r.top - box.top) / ratio)
+        val x2 = lx((r.right - box.left) / ratio); val y2 = ly((r.bottom - box.top) / ratio)
         path.append(" M$x1,$y1 H$x2 V$y2 H$x1 Z")
     }
     return "path(evenodd, '$path')"

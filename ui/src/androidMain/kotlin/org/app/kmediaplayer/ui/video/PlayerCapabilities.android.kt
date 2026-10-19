@@ -12,3 +12,5 @@ actual object PlayerCapabilities {
     actual val fileEditing = true
     actual val storeUpdates = true
 }
+
+internal actual val wheelZoomStep: Float = 0.1f
