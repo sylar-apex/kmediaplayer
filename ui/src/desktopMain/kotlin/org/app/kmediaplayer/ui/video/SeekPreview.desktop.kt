@@ -12,7 +12,7 @@ actual object SeekPreview {
     actual suspend fun open(uri: String, maxWidth: Int): FrameSource? {
         val session = VlcFrameSession.open(uri, maxWidth) ?: return null
         return object : FrameSource {
-            override suspend fun frameAt(ms: Long): ImageBitmap? {
+            override suspend fun frameAt(ms: Long, exact: Boolean): ImageBitmap? {
                 val f = session.frameAt(ms) ?: return null
                 return Image.makeRaster(ImageInfo(f.width, f.height, ColorType.BGRA_8888, ColorAlphaType.OPAQUE), f.pixels, f.width * 4).toComposeImageBitmap()
             }

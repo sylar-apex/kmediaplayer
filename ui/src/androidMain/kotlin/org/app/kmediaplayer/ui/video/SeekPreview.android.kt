@@ -8,7 +8,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.app.kmediaplayer.KMediaPlayer
 import org.app.kmediaplayer.android.KMediaPlayerAndroid
+import org.app.kmediaplayer.settings.PlayerKeys
 
 actual object SeekPreview {
     actual suspend fun open(uri: String, maxWidth: Int): FrameSource? = withContext(Dispatchers.IO) {
@@ -30,9 +32,11 @@ actual object SeekPreview {
         // One retriever, one request at a time: it is not thread-safe.
         val lock = Mutex()
         object : FrameSource {
-            override suspend fun frameAt(ms: Long): ImageBitmap? = lock.withLock {
+            override suspend fun frameAt(ms: Long, exact: Boolean): ImageBitmap? = lock.withLock {
+                // Same rule as the player: with fast seeking it lands on the nearest keyframe, otherwise on the exact time.
+                val option = if (exact && !KMediaPlayer.settings[PlayerKeys.fastSeek]) MediaMetadataRetriever.OPTION_CLOSEST else MediaMetadataRetriever.OPTION_CLOSEST_SYNC
                 withContext(Dispatchers.IO) {
-                    runCatching { r.getScaledFrameAtTime(ms * 1000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, tw, th)?.asImageBitmap() }.getOrNull()
+                    runCatching { r.getScaledFrameAtTime(ms * 1000, option, tw, th)?.asImageBitmap() }.getOrNull()
                 }
             }
             override fun close() { runCatching { r.release() } }

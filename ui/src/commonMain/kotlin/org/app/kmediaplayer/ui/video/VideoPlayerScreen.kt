@@ -720,21 +720,23 @@ private fun SeekRow(st: VideoPlayerState) {
  */
 @Composable
 private fun SeekPreviewBubble(board: SeekStoryboard?, positionMs: Long, fraction: Float, barWidth: Int) {
-    val frame = board?.nearest(positionMs)
+    val frame = board?.preview(positionMs)
     val density = LocalDensity.current
     val inset = with(density) { 16.dp.toPx() }
-    val bubbleW = if (frame != null) 168.dp else 72.dp
+    // Fixed size, so the bubble doesn't jump when the first frame arrives; the time sits on the frame, as on YouTube.
+    val bubbleW = 168.dp
     val centre = inset + (barWidth - 2 * inset) * fraction
     val left = with(density) { (centre - (bubbleW.toPx() / 2)).coerceIn(0f, (barWidth - bubbleW.toPx()).coerceAtLeast(0f)).toDp() }
-    Column(
-        Modifier.offset(x = left, y = if (frame != null) (-112).dp else (-34).dp).width(bubbleW)
-            .background(Color(0xE6000000), RoundedCornerShape(8.dp)).padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
+        Modifier.offset(x = left, y = (-104).dp).width(bubbleW).aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(8.dp)).background(Color(0xFF1B1F24)),
     ) {
-        if (frame != null) Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(5.dp)).background(Color(0xFF1B1F24)), contentAlignment = Alignment.Center) {
-            Image(frame, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-        }
-        Text(formatDuration(positionMs), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = if (frame != null) 3.dp else 0.dp))
+        frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+        Text(
+            formatDuration(positionMs), Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
+                .background(Color(0xCC000000), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+        )
     }
 }
 

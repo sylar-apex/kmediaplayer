@@ -24,7 +24,7 @@ class VlcFrameSession private constructor(private val maxWidth: Int) : AutoClose
     @Volatile private var framesSinceSeek = 0
     private lateinit var player: EmbeddedMediaPlayer
 
-    /** The frame nearest [ms] (keyframe accuracy, which is what makes it fast), or null if it doesn't come in time. */
+    /** The frame at [ms] (exact, as the player seeks exactly), or null if it doesn't come in time. */
     suspend fun frameAt(ms: Long): ThumbnailFrame? = lock.withLock {
         withContext(Dispatchers.IO) {
             val result = CompletableDeferred<ThumbnailFrame>()
@@ -76,7 +76,7 @@ class VlcFrameSession private constructor(private val maxWidth: Int) : AutoClose
                 videoSurface().set(factory.videoSurfaces().newVideoSurface(session.Format(), session.Frames(), true))
                 audio().setMute(true)
             }
-            if (!session.player.media().start(path.toMrl(), ":no-audio", ":no-spu", ":avcodec-threads=2", ":input-fast-seek")) {
+            if (!session.player.media().start(path.toMrl(), ":no-audio", ":no-spu", ":avcodec-threads=2")) {
                 session.close(); return@withContext null
             }
             session.player.controls().setPause(true)
