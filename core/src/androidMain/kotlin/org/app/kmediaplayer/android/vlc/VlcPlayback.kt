@@ -76,6 +76,8 @@ internal class VlcPlayback(private val context: Context, private val callback: V
             setHWDecoderEnabled(hardware, false)
             if (startMs > 0) addOption(":start-time=${startMs / 1000.0}")
             VlcOptions.mediaOptions.forEach(::addOption)
+            // Network streams keep more buffered ahead, so a busy Wi-Fi moment doesn't stall playback.
+            if (uri.startsWith("http")) addOption(":network-caching=5000")
             extras.vlcOptions().forEach(::addOption)
         }
         mp.media = media

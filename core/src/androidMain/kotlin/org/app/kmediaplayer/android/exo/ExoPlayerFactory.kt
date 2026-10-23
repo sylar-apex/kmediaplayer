@@ -87,10 +87,12 @@ internal object ExoPlayerFactory {
 
     private fun loadControl(): LoadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(
-            /* minBufferMs = */ 20_000,
-            /* maxBufferMs = */ 60_000,
+            // Keep a long stretch buffered ahead (like streaming apps), start fast, and after a stall wait for a
+            // little more so it doesn't stall again straight away. Local files fill this instantly.
+            /* minBufferMs = */ 30_000,
+            /* maxBufferMs = */ 120_000,
             /* bufferForPlaybackMs = */ 1_000,
-            /* bufferForPlaybackAfterRebufferMs = */ 2_500,
+            /* bufferForPlaybackAfterRebufferMs = */ 4_000,
         )
         .setBackBuffer(10_000, true)
         .setPrioritizeTimeOverSizeThresholds(true)

@@ -72,6 +72,8 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
         val options = buildList {
             if (startMs > 0) add(":start-time=${startMs / 1000.0}")
             if (decoder == Decoder.SW) add(":avcodec-hw=none")
+            // Network streams keep more buffered ahead, so a busy Wi-Fi moment doesn't stall playback.
+            if (uri.startsWith("http")) add(":network-caching=5000")
             addAll(extras.vlcOptions())
         }.toTypedArray()
         started = false
@@ -150,10 +152,32 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
     }
 
     /** libVLC asks for the buffer layout once per video size; RV32 is BGRA, which Skia draws directly. */
+    /** [w]×[h] scaled down (never up) to fit the largest attached screen in device pixels, keeping the aspect. */
+    private fun fitToScreen(w: Int, h: Int): Pair<Int, Int> {
+        val (sw, sh) = maxScreenPixels
+        if (w <= 0 || h <= 0 || (w <= sw && h <= sh)) return w to h
+        val scale = minOf(sw.toDouble() / w, sh.toDouble() / h)
+        // Even sizes: chroma-subsampled video scales cleanly.
+        return ((w * scale).toInt() and 1.inv()).coerceAtLeast(2) to ((h * scale).toInt() and 1.inv()).coerceAtLeast(2)
+    }
+
+    private val maxScreenPixels: Pair<Int, Int> by lazy {
+        runCatching {
+            java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { d ->
+                val t = d.defaultConfiguration.defaultTransform
+                val b = d.defaultConfiguration.bounds
+                (b.width * t.scaleX).toInt() to (b.height * t.scaleY).toInt()
+            }.maxByOrNull { it.first * it.second }
+        }.getOrNull()?.takeIf { it.first > 0 && it.second > 0 } ?: (3840 to 2160)
+    }
+
     private inner class FormatCallback : BufferFormatCallback {
         override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
             callback?.onVideoSize(sourceWidth, sourceHeight)
-            return RV32BufferFormat(sourceWidth, sourceHeight)
+            // Frames are copied into the window every time, so never ask for more pixels than the screen can show:
+            // a 4K video on a smaller display costs a fraction of the copying, and VLC scales on its decode threads.
+            val (w, h) = fitToScreen(sourceWidth, sourceHeight)
+            return RV32BufferFormat(w, h)
         }
         override fun newFormatSize(bufferWidth: Int, bufferHeight: Int, displayWidth: Int, displayHeight: Int) {
             callback?.onVideoSize(displayWidth, displayHeight)
