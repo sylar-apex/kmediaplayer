@@ -689,8 +689,12 @@ private fun SeekRow(st: VideoPlayerState) {
     val dur = st.duration.coerceAtLeast(1)
     val value = dragging ?: (st.position.toFloat() / dur).coerceIn(0f, 1f)
     val shown = dragging?.let { (it * dur).toLong() } ?: st.position
-    // Hover (mouse) or drag (touch) shows the picture at that time above the bar.
+    // Hover (mouse) or drag (touch) shows the picture at that time above the bar, from a storyboard built in the
+    // background as soon as the video's length is known.
     val previewAt = dragging ?: hovering
+    val uri = st.current?.uri
+    val board = remember(uri, st.duration > 0) { if (uri != null && st.duration > 0 && st.current?.isAudio != true) SeekStoryboard(uri, st.duration) else null }
+    DisposableEffect(board) { onDispose { board?.close() } }
     Box {
         Row(Modifier.height(50.dp).offset(y = 4.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(formatDuration(shown), color = tint, fontSize = 12.5.sp, modifier = Modifier.width(52.dp))
@@ -701,7 +705,7 @@ private fun SeekRow(st: VideoPlayerState) {
                     onFinished = { dragging?.let { st.seekTo((it * dur).toLong()) }; dragging = null },
                     onHover = { hovering = it; if (it != null) st.scheduleHide() },
                 )
-                if (previewAt != null && st.duration > 0) SeekPreviewBubble(st, (previewAt * dur).toLong(), previewAt, barWidth)
+                if (previewAt != null && st.duration > 0) SeekPreviewBubble(board, (previewAt * dur).toLong(), previewAt, barWidth)
             }
             Text(if (s[PlayerKeys.showRemaining]) formatRemaining(shown, st.duration) else formatDuration(st.duration), color = tint, fontSize = 12.5.sp,
                 modifier = Modifier.width(52.dp), textAlign = TextAlign.End, maxLines = 1, softWrap = false)
@@ -711,36 +715,26 @@ private fun SeekRow(st: VideoPlayerState) {
 }
 
 /**
- * The frame and time at [positionMs], floating above the seek bar at [fraction] of its [barWidth]. Frames are grabbed
- * on a short delay and cached per two seconds, so sweeping the pointer doesn't queue a grab for every pixel.
+ * The frame and time at [positionMs], floating above the seek bar at [fraction] of its [barWidth]. The frame comes
+ * from the video's storyboard, so it shows at once: the nearest frame grabbed so far, sharpened as more arrive.
  */
 @Composable
-private fun SeekPreviewBubble(st: VideoPlayerState, positionMs: Long, fraction: Float, barWidth: Int) {
-    val uri = st.current?.uri ?: return
-    val bucket = positionMs / 2_000
-    val cache = remember(uri) { mutableMapOf<Long, ImageBitmap?>() }
-    var frame by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(uri, bucket) {
-        if (bucket in cache) { frame = cache[bucket]; return@LaunchedEffect }
-        delay(120)
-        val img = SeekPreview.frame(uri, bucket * 2_000, 320)
-        cache[bucket] = img
-        frame = img
-    }
+private fun SeekPreviewBubble(board: SeekStoryboard?, positionMs: Long, fraction: Float, barWidth: Int) {
+    val frame = board?.nearest(positionMs)
     val density = LocalDensity.current
     val inset = with(density) { 16.dp.toPx() }
-    val bubbleW = 168.dp
+    val bubbleW = if (frame != null) 168.dp else 72.dp
     val centre = inset + (barWidth - 2 * inset) * fraction
     val left = with(density) { (centre - (bubbleW.toPx() / 2)).coerceIn(0f, (barWidth - bubbleW.toPx()).coerceAtLeast(0f)).toDp() }
     Column(
-        Modifier.offset(x = left, y = (-112).dp).width(bubbleW)
+        Modifier.offset(x = left, y = if (frame != null) (-112).dp else (-34).dp).width(bubbleW)
             .background(Color(0xE6000000), RoundedCornerShape(8.dp)).padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(5.dp)).background(Color(0xFF1B1F24)), contentAlignment = Alignment.Center) {
-            frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+        if (frame != null) Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(5.dp)).background(Color(0xFF1B1F24)), contentAlignment = Alignment.Center) {
+            Image(frame, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
         }
-        Text(formatDuration(positionMs), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 3.dp))
+        Text(formatDuration(positionMs), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = if (frame != null) 3.dp else 0.dp))
     }
 }
 
