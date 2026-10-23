@@ -29,9 +29,10 @@ object VlcThumbnailer {
 
     val isAvailable: Boolean get() = VlcRuntime.isAvailable
 
-    suspend fun frame(path: String, maxWidth: Int = 320, timeoutMs: Long = 5_000): ThumbnailFrame? = withContext(Dispatchers.IO) {
+    /** A frame of [path]: at [atMs] when given (seek-bar previews), else a little way in (list thumbnails). */
+    suspend fun frame(path: String, maxWidth: Int = 320, timeoutMs: Long = 5_000, atMs: Long? = null): ThumbnailFrame? = withContext(Dispatchers.IO) {
         val grabber = acquire() ?: return@withContext null
-        try { grabber.frame(path, maxWidth, timeoutMs) } finally { idle.trySend(grabber) }
+        try { grabber.frame(path, maxWidth, timeoutMs, atMs) } finally { idle.trySend(grabber) }
     }
 
     /** An idle player, a new one while the pool is below [POOL_SIZE], or waits for one to free up. */
@@ -49,7 +50,10 @@ object VlcThumbnailer {
             events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
                 override fun playing(mediaPlayer: MediaPlayer) {
                     // Seek once the input is open; frames before the seek are ignored.
-                    mediaPlayer.submit { mediaPlayer.controls().setPosition(0.12f); g.seeked = true }
+                    mediaPlayer.submit {
+                        g.atMs?.let { mediaPlayer.controls().setTime(it) } ?: mediaPlayer.controls().setPosition(0.12f)
+                        g.seeked = true
+                    }
                 }
                 override fun error(mediaPlayer: MediaPlayer) { g.pending?.cancel() }
             })
@@ -61,10 +65,12 @@ object VlcThumbnailer {
         @Volatile var maxWidth = 320
         @Volatile var pending: CompletableDeferred<ThumbnailFrame>? = null
         @Volatile var seeked = false
+        @Volatile var atMs: Long? = null
         private val player = build(this)
 
-        suspend fun frame(path: String, maxWidth: Int, timeoutMs: Long): ThumbnailFrame? {
+        suspend fun frame(path: String, maxWidth: Int, timeoutMs: Long, atMs: Long?): ThumbnailFrame? {
             this.maxWidth = maxWidth
+            this.atMs = atMs
             val result = CompletableDeferred<ThumbnailFrame>()
             pending = result
             seeked = false

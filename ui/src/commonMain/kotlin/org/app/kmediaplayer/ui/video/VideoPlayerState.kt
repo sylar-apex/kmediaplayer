@@ -129,12 +129,20 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
             index = engine.currentIndex
             onItemChanged()
         }
-        override fun onVideoSizeChanged(width: Int, height: Int) { videoW = width; videoH = height }
+        override fun onVideoSizeChanged(width: Int, height: Int) { if (width > 0 && height > 0) { videoW = width; videoH = height } }
         override fun onTracksChanged() { readTracks(); restoreTracks() }
         override fun onCues(lines: List<String>) { embeddedCues = lines }
         override fun onError(error: EngineError) {
-            if (settings[PlayerKeys.suppressError] && engine.hasNext()) { engine.seekToNext(); engine.prepare(); engine.play() }
-            else this@VideoPlayerState.error = error
+            if (settings[PlayerKeys.suppressError] && engine.hasNext()) { engine.seekToNext(); engine.prepare(); engine.play(); return }
+            this@VideoPlayerState.error = error
+            // A stream can fail because the other side stopped sharing it; ask the app for the real reason.
+            val uri = current?.uri ?: return
+            val explain = KMediaPlayer.explainStreamError ?: return
+            if (!uri.startsWith("http")) return
+            scope.launch {
+                val why = runCatching { explain(uri) }.getOrNull() ?: return@launch
+                if (this@VideoPlayerState.error == error) this@VideoPlayerState.error = error.copy(explanation = why)
+            }
         }
     }
 
@@ -210,6 +218,10 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     private fun onItemChanged() {
         val f = current ?: return
         title = f.title
+        // Size the picture from the file until the engine reports the decoded size; some streams never report it,
+        // and without a size every zoom mode would fill the screen.
+        videoW = f.width
+        videoH = f.height
         ab = AbRepeat()
         externalSubs = null; externalSubsName = null
         subtitleSyncMs = (settings[PlayerKeys.subtitleDefaultSync] * 1000).toLong()

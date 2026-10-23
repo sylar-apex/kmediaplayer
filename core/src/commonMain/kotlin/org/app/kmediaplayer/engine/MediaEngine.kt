@@ -30,7 +30,11 @@ data class FormatInfo(
     val language: String? = null,
 )
 
-data class EngineError(val codeName: String) {
+data class EngineError(
+    val codeName: String,
+    /** Plain-language reason supplied by the app (for example "no longer shared"); shown instead of the code. */
+    val explanation: String? = null,
+) {
     /** Source/network failures, where switching decoder cannot help. */
     val isIo: Boolean get() = "_IO_" in codeName
 

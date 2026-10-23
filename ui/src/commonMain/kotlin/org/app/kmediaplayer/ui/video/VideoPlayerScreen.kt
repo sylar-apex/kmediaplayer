@@ -1,5 +1,14 @@
 package org.app.kmediaplayer.ui.video
 
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -175,7 +184,7 @@ private fun VideoPlayerContent(window: PlayerWindow) {
 
     val keyboard = remember { FocusRequester() }
     if (PlayerCapabilities.keyboardShortcuts) LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)
+    BoxWithConstraints(Modifier.fillMaxSize().clipToBounds().background(Color.Black)
         .let { m ->
             if (!PlayerCapabilities.keyboardShortcuts) m
             else m.focusRequester(keyboard).focusable().onPreviewKeyEvent { PlayerKeyboard.handle(it, window) }
@@ -198,7 +207,8 @@ private fun VideoPlayerContent(window: PlayerWindow) {
         // The web video is an HTML element over the canvas: it zooms itself, since a Compose layer cannot scale it.
         LaunchedEffect(st.pinchScale, st.panX, st.panY) { PlatformVideoTools.setPictureTransform(st.pinchScale, st.panX, st.panY) }
         window.VideoSurface(
-            Modifier.align(Alignment.Center).size(vw, vh).let { m ->
+            // requiredSize, not size: Crop and 100% are larger than the screen, and size() would clamp them back to it.
+            Modifier.align(Alignment.Center).requiredSize(vw, vh).let { m ->
                 if (videoNeedsCutouts) m
                 else m.graphicsLayer { scaleX = st.pinchScale; scaleY = st.pinchScale; translationX = st.panX; translationY = st.panY }
             },
@@ -252,9 +262,9 @@ private fun VideoPlayerContent(window: PlayerWindow) {
         st.error?.let { err ->
             if (err.needsFileAccess) FileAccessDialog(window) else PlayerDialog(
                 onDismissRequest = { st.error = null },
-                text = { Text("Can't play this media.\n${err.codeName}") },
+                text = { Text(err.explanation ?: "Can't play this media.\n${err.codeName}") },
                 confirmButton = { TextButton({ st.error = null; if (st.engine.hasNext()) st.next() else window.close() }) { Text("OK") } },
-                dismissButton = if (err.isIo || st.decoder == Decoder.SW) null else ({ TextButton({ st.error = null; st.setDecoderMode(Decoder.SW) }) { Text("TRY SW DECODER") } }),
+                dismissButton = if (err.isIo || err.explanation != null || st.decoder == Decoder.SW) null else ({ TextButton({ st.error = null; st.setDecoderMode(Decoder.SW) }) { Text("TRY SW DECODER") } }),
             )
         }
     }
@@ -674,29 +684,90 @@ private fun SeekRow(st: VideoPlayerState) {
     val s = KMediaPlayer.settings
     val tint = Color(s[PlayerKeys.controlNormalColor])
     var dragging by remember { mutableStateOf<Float?>(null) }
+    var hovering by remember { mutableStateOf<Float?>(null) }
+    var barWidth by remember { mutableStateOf(0) }
     val dur = st.duration.coerceAtLeast(1)
     val value = dragging ?: (st.position.toFloat() / dur).coerceIn(0f, 1f)
     val shown = dragging?.let { (it * dur).toLong() } ?: st.position
-    Row(Modifier.height(50.dp).offset(y = 4.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(formatDuration(shown), color = tint, fontSize = 12.5.sp, modifier = Modifier.width(52.dp))
-        MxSeekBar(
-            value, Color(s[PlayerKeys.progressBarColor]), s[PlayerKeys.progressBarStyle] != "thin", Modifier.weight(1f).fillMaxHeight(),
-            onChange = { dragging = it; st.scheduleHide() },
-            onFinished = { dragging?.let { st.seekTo((it * dur).toLong()) }; dragging = null },
-        )
-        Text(if (s[PlayerKeys.showRemaining]) formatRemaining(shown, st.duration) else formatDuration(st.duration), color = tint, fontSize = 12.5.sp,
-            modifier = Modifier.width(52.dp), textAlign = TextAlign.End, maxLines = 1, softWrap = false)
+    // Hover (mouse) or drag (touch) shows the picture at that time above the bar.
+    val previewAt = dragging ?: hovering
+    Box {
+        Row(Modifier.height(50.dp).offset(y = 4.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(formatDuration(shown), color = tint, fontSize = 12.5.sp, modifier = Modifier.width(52.dp))
+            Box(Modifier.weight(1f).fillMaxHeight().onSizeChanged { barWidth = it.width }) {
+                MxSeekBar(
+                    value, Color(s[PlayerKeys.progressBarColor]), s[PlayerKeys.progressBarStyle] != "thin", Modifier.fillMaxSize(),
+                    onChange = { dragging = it; st.scheduleHide() },
+                    onFinished = { dragging?.let { st.seekTo((it * dur).toLong()) }; dragging = null },
+                    onHover = { hovering = it; if (it != null) st.scheduleHide() },
+                )
+                if (previewAt != null && st.duration > 0) SeekPreviewBubble(st, (previewAt * dur).toLong(), previewAt, barWidth)
+            }
+            Text(if (s[PlayerKeys.showRemaining]) formatRemaining(shown, st.duration) else formatDuration(st.duration), color = tint, fontSize = 12.5.sp,
+                modifier = Modifier.width(52.dp), textAlign = TextAlign.End, maxLines = 1, softWrap = false)
+        }
     }
     if (st.ab.a != null) Text("A-B: ${formatDuration(st.ab.a!!)} → ${st.ab.b?.let { formatDuration(it) } ?: "…"}", Modifier.padding(start = 16.dp), color = Color(0xFFFFC107), fontSize = 12.sp)
 }
 
+/**
+ * The frame and time at [positionMs], floating above the seek bar at [fraction] of its [barWidth]. Frames are grabbed
+ * on a short delay and cached per two seconds, so sweeping the pointer doesn't queue a grab for every pixel.
+ */
+@Composable
+private fun SeekPreviewBubble(st: VideoPlayerState, positionMs: Long, fraction: Float, barWidth: Int) {
+    val uri = st.current?.uri ?: return
+    val bucket = positionMs / 2_000
+    val cache = remember(uri) { mutableMapOf<Long, ImageBitmap?>() }
+    var frame by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri, bucket) {
+        if (bucket in cache) { frame = cache[bucket]; return@LaunchedEffect }
+        delay(120)
+        val img = SeekPreview.frame(uri, bucket * 2_000, 320)
+        cache[bucket] = img
+        frame = img
+    }
+    val density = LocalDensity.current
+    val inset = with(density) { 16.dp.toPx() }
+    val bubbleW = 168.dp
+    val centre = inset + (barWidth - 2 * inset) * fraction
+    val left = with(density) { (centre - (bubbleW.toPx() / 2)).coerceIn(0f, (barWidth - bubbleW.toPx()).coerceAtLeast(0f)).toDp() }
+    Column(
+        Modifier.offset(x = left, y = (-112).dp).width(bubbleW)
+            .background(Color(0xE6000000), RoundedCornerShape(8.dp)).padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(5.dp)).background(Color(0xFF1B1F24)), contentAlignment = Alignment.Center) {
+            frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+        }
+        Text(formatDuration(positionMs), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
 /** Thin track with a round thumb, 16dp internal inset like the platform SeekBar. */
 @Composable
-fun MxSeekBar(value: Float, color: Color, thick: Boolean, modifier: Modifier, onChange: (Float) -> Unit, onFinished: () -> Unit) {
+fun MxSeekBar(
+    value: Float, color: Color, thick: Boolean, modifier: Modifier, onChange: (Float) -> Unit, onFinished: () -> Unit,
+    /** Where a mouse pointer hovers over the bar (0..1), or null when it leaves. */
+    onHover: (Float?) -> Unit = {},
+) {
     val inset = with(LocalDensity.current) { 16.dp.toPx() }
     fun frac(x: Float, w: Int) = ((x - inset) / (w - 2 * inset)).coerceIn(0f, 1f)
     Canvas(
         modifier
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        val mouse = e.changes.firstOrNull()?.type == PointerType.Mouse
+                        when (e.type) {
+                            PointerEventType.Move, PointerEventType.Enter -> if (mouse) onHover(frac(e.changes.first().position.x, size.width))
+                            PointerEventType.Exit -> onHover(null)
+                            else -> {}
+                        }
+                    }
+                }
+            }
             .pointerInput(Unit) { detectTapGestures { onChange(frac(it.x, size.width)); onFinished() } }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(

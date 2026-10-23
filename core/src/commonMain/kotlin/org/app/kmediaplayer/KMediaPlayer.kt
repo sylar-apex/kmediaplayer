@@ -30,6 +30,12 @@ object KMediaPlayer {
     var host: PlayerHost = PlayerHost.None
         private set
 
+    /**
+     * Explains why a network stream failed, in words for the user, or null when it has nothing to add. The app sets
+     * this to ask a sharing device whether the file is still shared, instead of showing a decoder error code.
+     */
+    var explainStreamError: (suspend (uri: String) -> String?)? = null
+
     /** The files currently queued, in player order. Empty for network streams. */
     val queue = MutableStateFlow<List<MediaFile>>(emptyList())
     /** True when the current queue was started from a music screen. */
