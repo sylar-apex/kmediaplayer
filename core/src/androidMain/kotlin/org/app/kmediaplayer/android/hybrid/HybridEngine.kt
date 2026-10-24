@@ -3,6 +3,7 @@ package org.app.kmediaplayer.android.hybrid
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlin.math.roundToInt
 import android.view.SurfaceView
 import androidx.annotation.OptIn
 import androidx.media3.common.Player
@@ -333,6 +334,16 @@ object HybridEngine : MediaEngine {
     override fun setPreferredLanguages(audio: String?, text: String?) = exo.setPreferredLanguages(audio, text)
 
     override fun videoFormat(): FormatInfo? = if (isDetour) vlc.videoFormat() else exo.videoFormat()
+
+    override fun capabilityNote(): String? {
+        val f = videoFormat() ?: return null
+        val mime = PlaybackRouter.mimeOf(f.sampleMimeType ?: f.codecs ?: return null) ?: return null
+        if (PlaybackRouter.canPlaySmoothly(mime, f.width, f.height, f.frameRate) != false) return null
+        val res = when (maxOf(f.width, f.height)) { in 3000..Int.MAX_VALUE -> "4K"; in 2400..2999 -> "1440p"; in 1800..2399 -> "1080p"; else -> "${minOf(f.width, f.height)}p" }
+        val fps = if (f.frameRate > 0) " ${f.frameRate.roundToInt()} fps" else ""
+        val codec = when (mime) { "video/av01" -> "AV1"; "video/hevc" -> "HEVC"; "video/avc" -> "H.264"; "video/x-vnd.on2.vp9" -> "VP9"; else -> mime.substringAfter('/') }
+        return "$res$fps $codec is too heavy for this device; some frames will be skipped"
+    }
     override fun audioFormat(): FormatInfo? = if (isDetour) vlc.audioFormat() else exo.audioFormat()
 
     override fun applySettings() {

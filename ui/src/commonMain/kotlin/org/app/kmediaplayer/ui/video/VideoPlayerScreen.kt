@@ -176,7 +176,8 @@ private fun VideoPlayerContent(window: PlayerWindow) {
     LaunchedEffect(st.controlsVisible, st.panel, st.locked) { window.showSystemBars(st.controlsVisible && !st.locked && (st.panel == Panel.None || st.panel == Panel.AbRepeat)) }
     LaunchedEffect(st.panel) { if (st.panel == Panel.None) st.scheduleHide() }
     LaunchedEffect(st.snack) { if (st.snack != null) { delay(3000); st.snack = null } }
-    LaunchedEffect(st.toast) { if (st.toast != null) { delay(1500); st.toast = null } }
+    // Short notices (speed, zoom) go quickly; a sentence stays long enough to read.
+    LaunchedEffect(st.toast) { st.toast?.let { delay(if (it.length > 40) 4500 else 1500); st.toast = null } }
     // Level and seek badges hide shortly after their last change, whether a gesture or a key set them.
     LaunchedEffect(st.levelOsd) { if (st.levelOsd != null) { delay(1500); st.levelOsd = null } }
     LaunchedEffect(st.tapSeekOsd) { if (st.tapSeekOsd != null) { delay(1500); st.tapSeekOsd = null } }

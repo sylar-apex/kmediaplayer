@@ -136,6 +136,11 @@ interface MediaEngine {
     fun setPreferredLanguages(audio: String?, text: String?)
 
     fun videoFormat(): FormatInfo?
+    /**
+     * A short note when the current video is beyond what this device's decoders handle smoothly (for example 4K at
+     * 60 fps in a format it has no chip for); null when it should play fine or the engine can't tell.
+     */
+    fun capabilityNote(): String? = null
     fun audioFormat(): FormatInfo?
 
     /** Re-applies settings the engine only reads at build time (audio focus, noisy handling, seek mode). */

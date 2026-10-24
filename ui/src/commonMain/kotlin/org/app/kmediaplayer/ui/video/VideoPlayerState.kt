@@ -145,6 +145,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     private var stoppedAtEnd = false
     /** Going back to a finished video after the engine moved on; sizes reported meanwhile belong to the other one. */
     private var bouncing = false
+    private var capabilityCheckedFor: String? = null
     /** Picture sizes the engine reported, by URI, for files that don't carry one (shared over the network). */
     private val reportedSizes = mutableMapOf<String, Pair<Int, Int>>()
 
@@ -154,7 +155,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
             buffering = state == EngineState.Buffering
             if (!buffering) bufferPercent = null
             duration = engine.duration
-            if (state == EngineState.Ready) { checkResume(); if (videoW <= 0) adoptEngineSize() }
+            if (state == EngineState.Ready) { checkResume(); if (videoW <= 0) adoptEngineSize(); checkCapability() }
             if (state == EngineState.Ended) onEnded()
         }
         override fun onItemTransition() {
@@ -181,8 +182,12 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
             if (width <= 0 || height <= 0 || bouncing) return
             videoW = width; videoH = height
             current?.uri?.let { reportedSizes[it] = width to height }
+            checkCapability()
         }
-        override fun onTracksChanged() { readTracks(); restoreTracks(); if (videoW <= 0) adoptEngineSize() }
+        override fun onTracksChanged() {
+            readTracks(); restoreTracks(); if (videoW <= 0) adoptEngineSize()
+            checkCapability()
+        }
         override fun onCues(lines: List<String>) { embeddedCues = lines }
         override fun onBufferProgress(percent: Int) { bufferPercent = percent.takeIf { it in 0..99 } }
         override fun onError(error: EngineError) {
@@ -275,6 +280,17 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         ticker?.cancel()
         engine.removeListener(listener)
         engine.pauseAtEndOfItems = false
+    }
+
+    /**
+     * Once per video, as soon as the engine knows its format: a note when it is beyond this device, so skipped
+     * frames aren't mistaken for a fault.
+     */
+    private fun checkCapability() {
+        val uri = current?.uri ?: return
+        if (uri == capabilityCheckedFor || engine.videoFormat()?.takeIf { it.width > 0 } == null) return
+        capabilityCheckedFor = uri
+        engine.capabilityNote()?.let { toast = it }
     }
 
     private fun adoptEngineSize() {
