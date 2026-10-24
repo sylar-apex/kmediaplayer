@@ -36,6 +36,16 @@ internal object PlaybackRouter {
 
     fun shouldFallBack(errorCodeName: String): Boolean = errorCodeName in fallbackErrors
 
+    /** Whether Android has any decoder (hardware or its own software one) for [mime]; asked once per type. */
+    fun hasAndroidDecoder(mime: String): Boolean = decoders.getOrPut(mime) {
+        runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+                .any { !it.isEncoder && it.supportedTypes.any { t -> t.equals(mime, ignoreCase = true) } }
+        }.getOrDefault(false)
+    }
+
+    private val decoders = mutableMapOf<String, Boolean>()
+
     /**
      * True when ExoPlayer opened the file but has no decoder at all for its main video or audio track;
      * ExoPlayer then plays silently or shows black instead of failing, so this is checked on every track

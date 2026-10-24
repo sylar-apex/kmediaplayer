@@ -70,7 +70,40 @@ object HybridEngine : MediaEngine {
 
     private fun currentUri(): String? = exo.currentItem?.localConfiguration?.uri?.toString()
 
-    private fun routeOf(uri: String): Backend = PlaybackRouter.route(names[uri] ?: uri, decoder)
+    private fun routeOf(uri: String): Backend = if (uri in androidDecoded) Backend.Exo else PlaybackRouter.route(names[uri] ?: uri, decoder)
+
+    /**
+     * Items libVLC decodes too slowly here: 4K AV1 on phones without an AV1 chip falls further and further behind in
+     * libVLC's decoder, so every frame arrives late and the picture freezes while the sound goes on. Android's own
+     * AV1 decoder keeps up far better (it is what other players use), so ExoPlayer plays these.
+     */
+    private val androidDecoded = mutableSetOf<String>()
+    /** Items ExoPlayer turned out unable to play after a hand-off; they stay with libVLC. */
+    private val vlcOnly = mutableSetOf<String>()
+
+    /** ExoPlayer can't play the current item after all: back to libVLC for good. */
+    private fun keepWithVlc() { currentUri()?.let { androidDecoded -= it; vlcOnly += it } }
+
+    /** On libVLC's first look at the tracks: moves an AV1 video to Android's decoder, at the same place. */
+    private fun handOffSlowCodec(): Boolean {
+        if (!isDetour) return false
+        val codec = vlc.videoFormat()?.codecs?.lowercase()?.trim() ?: return false
+        // libVLC names it by description ("AOMedia's AV1 Video") or fourcc ("av01").
+        if ("av1" !in codec && codec != "av01") return false
+        if (!PlaybackRouter.hasAndroidDecoder("video/av01")) return false
+        val uri = currentUri() ?: return false
+        if (uri in vlcOnly) return false
+        val at = position
+        val play = playWhenReady
+        Log.i(TAG, "AV1: Android's decoder plays ${names[uri] ?: uri} from ${at}ms")
+        androidDecoded += uri
+        endDetour()
+        exo.seekTo(exo.currentIndex, at)
+        exo.exo.playWhenReady = play
+        exo.prepare()
+        dispatch { it.onTracksChanged(); it.onEvents() }
+        return true
+    }
 
     /** Hands the current queue item to libVLC, starting at [startMs]. */
     private fun startDetour(startMs: Long, playWhenReady: Boolean) {
@@ -142,14 +175,14 @@ object HybridEngine : MediaEngine {
         override fun onVideoSizeChanged(width: Int, height: Int) { if (!isDetour) dispatch { it.onVideoSizeChanged(width, height) } }
         override fun onTracksChanged() {
             if (isDetour) return
-            if (PlaybackRouter.hasUnplayableMainTrack(exo.exo.currentTracks)) startDetour(exo.position, exo.playWhenReady)
+            if (PlaybackRouter.hasUnplayableMainTrack(exo.exo.currentTracks)) { keepWithVlc(); startDetour(exo.position, exo.playWhenReady) }
             else dispatch { it.onTracksChanged() }
         }
         override fun onCues(lines: List<String>) { if (!isDetour) dispatch { it.onCues(lines) } }
         override fun onError(error: EngineError) {
             if (isDetour) return
             Log.w(TAG, "ExoPlayer error ${error.codeName}")
-            if (PlaybackRouter.shouldFallBack(error.codeName) && currentUri() != null) startDetour(exo.position, exo.playWhenReady)
+            if (PlaybackRouter.shouldFallBack(error.codeName) && currentUri() != null) { keepWithVlc(); startDetour(exo.position, exo.playWhenReady) }
             else dispatch { it.onError(error) }
         }
         override fun onShuffleChanged(enabled: Boolean) = dispatch { it.onShuffleChanged(enabled) }
@@ -161,7 +194,7 @@ object HybridEngine : MediaEngine {
         override fun onPlayingChanged(playing: Boolean) = dispatch { it.onIsPlayingChanged(playing); it.onEvents() }.also { refreshSession() }
         override fun onStateChanged(state: EngineState) = dispatch { it.onStateChanged(state); it.onEvents() }.also { refreshSession() }
         override fun onVideoSize(width: Int, height: Int) { vlcSize = width to height; dispatch { it.onVideoSizeChanged(width, height) } }
-        override fun onTracksChanged() = dispatch { it.onTracksChanged() }
+        override fun onTracksChanged() { main.post { if (!handOffSlowCodec()) dispatch { it.onTracksChanged() } } }
         override fun onBufferProgress(percent: Int) = dispatch { it.onBufferProgress(percent) }
         override fun onEnded() = onDetourEnded()
         override fun onError() = Log.w(TAG, "libVLC error").let { dispatch { it.onError(EngineError("ERROR_CODE_DECODING_FORMAT_UNSUPPORTED")) } }
