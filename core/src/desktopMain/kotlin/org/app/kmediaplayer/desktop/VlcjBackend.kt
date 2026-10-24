@@ -72,8 +72,8 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
         val options = buildList {
             if (startMs > 0) add(":start-time=${startMs / 1000.0}")
             if (decoder == Decoder.SW) add(":avcodec-hw=none")
-            // Network streams keep more buffered ahead, so a busy Wi-Fi moment doesn't stall playback.
-            if (uri.startsWith("http")) add(":network-caching=5000")
+            // Network streams buffer a little ahead for busy Wi-Fi moments; libVLC waits this long before the first frame, so keep it short.
+            if (uri.startsWith("http")) add(":network-caching=1500")
             addAll(extras.vlcOptions())
         }.toTypedArray()
         started = false

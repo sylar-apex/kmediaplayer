@@ -133,6 +133,15 @@ object Media3Engine : MediaEngine {
     override val currentIndex get() = exo.currentMediaItemIndex
     override val itemCount get() = exo.mediaItemCount
     override val title: String? get() = exo.mediaMetadata.title?.toString()
+    override val videoSize: Pair<Int, Int>?
+        get() {
+            val p = player ?: return null
+            p.videoSize.takeIf { it.width > 0 && it.height > 0 }?.let { return (it.width * it.pixelWidthHeightRatio).toInt() to it.height }
+            // Before the first frame is drawn there is no VideoSize yet; the selected track's format already knows.
+            val f = p.videoFormat?.takeIf { it.width > 0 && it.height > 0 } ?: return null
+            val w = (f.width * f.pixelWidthHeightRatio).toInt()
+            return if (f.rotationDegrees % 180 != 0) f.height to w else w to f.height
+        }
     override var volume: Float
         get() = exo.volume
         set(v) { exo.volume = v }

@@ -69,6 +69,7 @@ internal class VlcPlayback(private val context: Context, private val callback: V
      * [extras] adds a separate audio stream and the User-Agent for network items.
      */
     fun open(uri: String, startMs: Long, hardware: Boolean, playWhenReady: Boolean, extras: StreamExtras = StreamExtras.None) {
+        reportedSize = null
         close()
         val mp = MediaPlayer(libVlc)
         mp.setEventListener(::onEvent)
@@ -76,8 +77,8 @@ internal class VlcPlayback(private val context: Context, private val callback: V
             setHWDecoderEnabled(hardware, false)
             if (startMs > 0) addOption(":start-time=${startMs / 1000.0}")
             VlcOptions.mediaOptions.forEach(::addOption)
-            // Network streams keep more buffered ahead, so a busy Wi-Fi moment doesn't stall playback.
-            if (uri.startsWith("http")) addOption(":network-caching=5000")
+            // Network streams buffer a little ahead for busy Wi-Fi moments; libVLC waits this long before the first frame, so keep it short.
+            if (uri.startsWith("http")) addOption(":network-caching=1500")
             extras.vlcOptions().forEach(::addOption)
         }
         mp.media = media
@@ -231,20 +232,30 @@ internal class VlcPlayback(private val context: Context, private val callback: V
 
     private fun onEvent(event: MediaPlayer.Event) {
         when (event.type) {
-            MediaPlayer.Event.Buffering -> if (event.buffering < 100f) setState(EngineState.Buffering) else setState(EngineState.Ready)
-            MediaPlayer.Event.Playing -> { setState(EngineState.Ready); callback.onPlayingChanged(true) }
+            MediaPlayer.Event.Buffering -> if (event.buffering < 100f) setState(EngineState.Buffering) else { setState(EngineState.Ready); reportSize() }
+            MediaPlayer.Event.Playing -> { setState(EngineState.Ready); callback.onPlayingChanged(true); reportSize() }
             MediaPlayer.Event.Paused -> { setState(EngineState.Ready); callback.onPlayingChanged(false) }
             MediaPlayer.Event.Stopped -> callback.onPlayingChanged(false)
             MediaPlayer.Event.EndReached -> { setState(EngineState.Ended); callback.onPlayingChanged(false); callback.onEnded() }
             MediaPlayer.Event.EncounteredError -> { setState(EngineState.Idle); callback.onError() }
-            MediaPlayer.Event.ESAdded, MediaPlayer.Event.ESDeleted, MediaPlayer.Event.ESSelected -> callback.onTracksChanged()
-            MediaPlayer.Event.Vout -> player?.currentVideoTrack?.let { t ->
-                val sar = if (t.sarDen > 0 && t.sarNum > 0) t.sarNum.toFloat() / t.sarDen else 1f
-                val rotated = t.orientation >= IMedia.VideoTrack.Orientation.LeftTop
-                val w = (t.width * sar).toInt()
-                if (rotated) callback.onVideoSize(t.height, w) else callback.onVideoSize(w, t.height)
-            }
+            MediaPlayer.Event.ESAdded, MediaPlayer.Event.ESDeleted, MediaPlayer.Event.ESSelected -> { callback.onTracksChanged(); reportSize() }
+            MediaPlayer.Event.Vout -> reportSize()
         }
+    }
+
+    /** Size last sent; the next item reuses the video output, so Vout alone would never report its size. */
+    private var reportedSize: Pair<Int, Int>? = null
+
+    /** Sends the picture size (sample aspect and rotation applied) once the video track is known and it changed. */
+    private fun reportSize() {
+        val t = player?.currentVideoTrack?.takeIf { it.width > 0 && it.height > 0 } ?: return
+        val sar = if (t.sarDen > 0 && t.sarNum > 0) t.sarNum.toFloat() / t.sarDen else 1f
+        val rotated = t.orientation >= IMedia.VideoTrack.Orientation.LeftTop
+        val w = (t.width * sar).toInt()
+        val size = if (rotated) t.height to w else w to t.height
+        if (size == reportedSize) return
+        reportedSize = size
+        callback.onVideoSize(size.first, size.second)
     }
 
     private fun setState(s: EngineState) {

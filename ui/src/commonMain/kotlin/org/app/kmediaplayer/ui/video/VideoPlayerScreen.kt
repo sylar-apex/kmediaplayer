@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import kotlinx.coroutines.coroutineScope
 import kotlin.math.exp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -195,6 +196,29 @@ private fun VideoPlayerContent(window: PlayerWindow) {
                 if (st.controlsVisible) st.scheduleHide()
                 // Clicking buttons can move focus away; bring it back so shortcuts keep working.
                 if (PlayerCapabilities.keyboardShortcuts) runCatching { keyboard.requestFocus() }
+            }
+        }
+        .pointerInput(Unit) {
+            // Mouse: resting ~1s over the top or bottom bar shows the controls; they stay while it is there.
+            var inZone = false
+            var dwell: kotlinx.coroutines.Job? = null
+            coroutineScope {
+                while (true) {
+                    val ev = awaitPointerEventScope { awaitPointerEvent(PointerEventPass.Initial) }
+                    val change = ev.changes.firstOrNull() ?: continue
+                    if (change.type != PointerType.Mouse) continue
+                    val y = change.position.y
+                    val now = ev.type != PointerEventType.Exit && (y < size.height * 0.2f || y > size.height * 0.75f)
+                    if (now && !inZone) {
+                        dwell = launch { delay(1000); st.holdControls() }
+                    } else if (now && st.controlsVisible && dwell?.isCompleted != false) {
+                        st.holdControls()
+                    } else if (!now && inZone) {
+                        dwell?.cancel()
+                        if (st.controlsVisible) st.scheduleHide()
+                    }
+                    inZone = now
+                }
             }
         }) {
         val density = LocalDensity.current

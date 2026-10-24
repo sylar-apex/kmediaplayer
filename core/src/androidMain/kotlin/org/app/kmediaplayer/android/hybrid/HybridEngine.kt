@@ -82,6 +82,7 @@ object HybridEngine : MediaEngine {
             return
         }
         Log.i(TAG, "libVLC plays ${names[uri] ?: uri} from ${startMs}ms")
+        vlcSize = null
         exo.exo.clearVideoSurface()
         exo.exo.stop()
         isDetour = true
@@ -115,7 +116,8 @@ object HybridEngine : MediaEngine {
     private fun onDetourEnded() {
         when {
             repeatMode == RepeatMode.One -> { vlc.seekTo(0, fast = false); vlc.play() }
-            pauseAtEndOfItems && exo.hasNext() -> { endDetour(); exo.seekToNext(); exo.exo.playWhenReady = false; prepareCurrent(false) }
+            // Stays on the finished item; play starts it again, next moves on.
+            pauseAtEndOfItems -> dispatch { it.onStateChanged(EngineState.Ended); it.onIsPlayingChanged(false); it.onEvents() }
             exo.hasNext() -> { endDetour(); exo.seekToNext(); exo.exo.playWhenReady = true; prepareCurrent(true) }
             else -> dispatch { it.onStateChanged(EngineState.Ended); it.onEvents() }
         }
@@ -158,7 +160,7 @@ object HybridEngine : MediaEngine {
     private val vlcCallback = object : VlcCallback {
         override fun onPlayingChanged(playing: Boolean) = dispatch { it.onIsPlayingChanged(playing); it.onEvents() }.also { refreshSession() }
         override fun onStateChanged(state: EngineState) = dispatch { it.onStateChanged(state); it.onEvents() }.also { refreshSession() }
-        override fun onVideoSize(width: Int, height: Int) = dispatch { it.onVideoSizeChanged(width, height) }
+        override fun onVideoSize(width: Int, height: Int) { vlcSize = width to height; dispatch { it.onVideoSizeChanged(width, height) } }
         override fun onTracksChanged() = dispatch { it.onTracksChanged() }
         override fun onEnded() = onDetourEnded()
         override fun onError() = Log.w(TAG, "libVLC error").let { dispatch { it.onError(EngineError("ERROR_CODE_DECODING_FORMAT_UNSUPPORTED")) } }
@@ -217,6 +219,9 @@ object HybridEngine : MediaEngine {
     override val currentIndex get() = exo.currentIndex
     override val itemCount get() = exo.itemCount
     override val title: String? get() = exo.title
+    /** Last size VLC reported while it plays an item ExoPlayer can't. */
+    private var vlcSize: Pair<Int, Int>? = null
+    override val videoSize: Pair<Int, Int>? get() = if (isDetour) vlcSize else exo.videoSize
     override var volume: Float
         get() = exo.volume
         set(v) { exo.volume = v; vlc.volume = v }

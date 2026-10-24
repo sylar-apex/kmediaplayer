@@ -94,10 +94,16 @@ interface MediaEngine {
     val currentIndex: Int
     val itemCount: Int
     val title: String?
+    /**
+     * The current item's picture size as last reported, or null before it is known. Lets a screen that starts
+     * listening after the size event (it fires while loading) still size the picture.
+     */
+    val videoSize: Pair<Int, Int>? get() = null
     var volume: Float
     var speed: Float
     var shuffleEnabled: Boolean
     var repeatMode: RepeatMode
+    /** An item that finishes stays on screen, ended, instead of the queue moving on (play restarts it, next moves on). */
     var pauseAtEndOfItems: Boolean
     /** Decoder preference; takes effect the next time the item is prepared. */
     var decoder: Decoder

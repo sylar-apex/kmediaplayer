@@ -41,6 +41,9 @@ import org.jetbrains.compose.resources.DrawableResource
 enum class Panel { None, Overflow, Audio, Subtitle, Decoder, Speed, Equalizer, SleepTimer, AbRepeat, Aspect, Info, Bookmark, More, Display, Playlist, Customise }
 
 /** Everything the video screen shows and does, driven by one [MediaEngine]. */
+/** How far before the end a finished video is shown when it stops instead of going on to the next. */
+private const val END_MARGIN_MS = 150L
+
 class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     private val settings = KMediaPlayer.settings
     private val host = KMediaPlayer.host
@@ -116,24 +119,52 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     private var fadeJob: Job? = null
     private var restoredTracksFor: String? = null
 
+    /** The next item change was asked for (next, previous, a jump, loading a queue), not the end of a video. */
+    private var movedByUser = true
+    /** Stopped on a finished video instead of going on to the next; play starts it again. */
+    private var stoppedAtEnd = false
+    /** Going back to a finished video after the engine moved on; sizes reported meanwhile belong to the other one. */
+    private var bouncing = false
+    /** Picture sizes the engine reported, by URI, for files that don't carry one (shared over the network). */
+    private val reportedSizes = mutableMapOf<String, Pair<Int, Int>>()
+
     private val listener = object : EngineListener {
         override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing; scheduleHide() }
         override fun onStateChanged(state: EngineState) {
             buffering = state == EngineState.Buffering
             duration = engine.duration
-            if (state == EngineState.Ready) checkResume()
+            if (state == EngineState.Ready) { checkResume(); if (videoW <= 0) adoptEngineSize() }
             if (state == EngineState.Ended) onEnded()
         }
         override fun onItemTransition() {
             saveProgress()
+            val from = index
+            val finished = duration
+            val auto = !movedByUser
+            movedByUser = false
+            // "Play next automatically" off: a video that ends stays on screen, at its end, until play or next.
+            if (auto && !settings[PlayerKeys.autoPlayNext] && sleepEndAt == null && loop != LoopMode.All && from in queue.indices && engine.currentIndex != from) {
+                engine.pause()
+                movedByUser = true
+                bouncing = true
+                // Just before the end: at the very end some engines wait for data that never comes, and no frame shows.
+                engine.seekTo(from, (finished - END_MARGIN_MS).coerceAtLeast(0))
+                stoppedAtEnd = true
+                return
+            }
+            bouncing = false
             index = engine.currentIndex
             onItemChanged()
         }
-        override fun onVideoSizeChanged(width: Int, height: Int) { if (width > 0 && height > 0) { videoW = width; videoH = height } }
-        override fun onTracksChanged() { readTracks(); restoreTracks() }
+        override fun onVideoSizeChanged(width: Int, height: Int) {
+            if (width <= 0 || height <= 0 || bouncing) return
+            videoW = width; videoH = height
+            current?.uri?.let { reportedSizes[it] = width to height }
+        }
+        override fun onTracksChanged() { readTracks(); restoreTracks(); if (videoW <= 0) adoptEngineSize() }
         override fun onCues(lines: List<String>) { embeddedCues = lines }
         override fun onError(error: EngineError) {
-            if (settings[PlayerKeys.suppressError] && engine.hasNext()) { engine.seekToNext(); engine.prepare(); engine.play(); return }
+            if (settings[PlayerKeys.suppressError] && engine.hasNext()) { movedByUser = true; engine.seekToNext(); engine.prepare(); engine.play(); return }
             this@VideoPlayerState.error = error
             // A stream can fail because the other side stopped sharing it; ask the app for the real reason.
             val uri = current?.uri ?: return
@@ -152,6 +183,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         KMediaPlayer.isMusicSession.value = false
         engine.decoder = decoder
         engine.setPreferredLanguages(settings[PlayerKeys.audioLanguage], settings[PlayerKeys.subtitleLanguage])
+        movedByUser = true
         engine.setItems(files, startIndex, 0)
         index = startIndex
         firstIndex = startIndex
@@ -189,6 +221,9 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     private fun attach() {
         engine.removeListener(listener)
         engine.addListener(listener)
+        engine.pauseAtEndOfItems = !settings[PlayerKeys.autoPlayNext]
+        // The engine may have learned the size before this screen started listening.
+        adoptEngineSize()
         engine.speed = speed
         engine.repeatMode = RepeatMode.Off
         ticker?.cancel()
@@ -213,15 +248,23 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         saveProgress()
         ticker?.cancel()
         engine.removeListener(listener)
+        engine.pauseAtEndOfItems = false
+    }
+
+    private fun adoptEngineSize() {
+        val (w, h) = engine.videoSize ?: return
+        videoW = w; videoH = h
+        current?.uri?.let { reportedSizes[it] = w to h }
     }
 
     private fun onItemChanged() {
         val f = current ?: return
         title = f.title
         // Size the picture from the file until the engine reports the decoded size; some streams never report it,
-        // and without a size every zoom mode would fill the screen.
-        videoW = f.width
-        videoH = f.height
+        // and without a size every zoom mode would fill the screen. An unknown size (shared files) keeps what the
+        // engine already reported, which can arrive before this.
+        val size = if (f.width > 0 && f.height > 0) f.width to f.height else reportedSizes[f.uri] ?: engine.videoSize
+        size?.let { (w, h) -> videoW = w; videoH = h }
         ab = AbRepeat()
         externalSubs = null; externalSubsName = null
         subtitleSyncMs = (settings[PlayerKeys.subtitleDefaultSync] * 1000).toLong()
@@ -287,13 +330,17 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     // ---- transport ----
 
     fun togglePlay() {
-        if (engine.isPlaying) engine.pause() else { if (engine.state == EngineState.Ended) engine.seekTo(0); engine.play() }
+        if (engine.isPlaying) engine.pause() else {
+            if (engine.state == EngineState.Ended || stoppedAtEnd) { stoppedAtEnd = false; engine.seekTo(0) }
+            engine.play()
+        }
         scheduleHide()
     }
 
     fun seekBy(deltaMs: Long) { seekTo(engine.position + deltaMs) }
 
     fun seekTo(ms: Long) {
+        stoppedAtEnd = false
         engine.seekTo(ms.coerceIn(0, engine.duration.takeIf { it > 0 } ?: Long.MAX_VALUE))
         position = engine.position
         fadeIn(settings[PlayerKeys.fadeOnSeek])
@@ -301,6 +348,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
 
     fun next() {
         if (settings[PlayerKeys.prevNextToRewFf]) { seekBy(settings[PlayerKeys.moveInterval] * 1000L); return }
+        movedByUser = true
         if (shuffle && queue.size > 1) engine.seekTo(pickShuffled(), 0)
         else if (engine.hasNext()) engine.seekToNext()
         else toast = "Last item"
@@ -308,11 +356,12 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
 
     fun previous() {
         if (settings[PlayerKeys.prevNextToRewFf]) { seekBy(-settings[PlayerKeys.moveInterval] * 1000L); return }
+        movedByUser = true
         if (SmartPrevious.shouldRestart(settings[PlayerKeys.smartPrev], engine.position) || !engine.hasPrevious()) engine.seekTo(0)
         else engine.seekToPrevious()
     }
 
-    fun jumpTo(i: Int) { if (i in queue.indices) { engine.seekTo(i, 0); engine.play() } }
+    fun jumpTo(i: Int) { if (i in queue.indices) { movedByUser = true; engine.seekTo(i, 0); engine.play() } }
 
     private fun pickShuffled(): Int = queue.indices.filter { it != index }.random()
 
@@ -378,11 +427,11 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     fun startSleepTimer(minutes: Int, finishLast: Boolean) {
         sleepEndAt = nowMs() + minutes * 60_000L
         sleepFinishLast = finishLast
-        engine.pauseAtEndOfItems = false
+        engine.pauseAtEndOfItems = !settings[PlayerKeys.autoPlayNext]
         toast = "Sleep timer: ${minutes / 60}h ${minutes % 60}m"
     }
 
-    fun stopSleepTimer() { sleepEndAt = null; engine.pauseAtEndOfItems = false }
+    fun stopSleepTimer() { sleepEndAt = null; engine.pauseAtEndOfItems = !settings[PlayerKeys.autoPlayNext] }
 
     // ---- volume ----
 
@@ -471,6 +520,9 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     // ---- interface visibility ----
 
     fun showControls() { controlsVisible = true; scheduleHide() }
+
+    /** Mouse rests on the top or bottom bar: show the controls and keep them until [scheduleHide]. */
+    fun holdControls() { hideJob?.cancel(); controlsVisible = true }
 
     fun toggleControls() { controlsVisible = !controlsVisible; if (controlsVisible) scheduleHide() }
 

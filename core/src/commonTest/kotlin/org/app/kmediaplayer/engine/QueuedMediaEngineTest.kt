@@ -55,12 +55,12 @@ class QueuedMediaEngineTest {
         assertEquals(1, backend.opened.size)
     }
 
-    @Test fun pauseAtEndOfItemsOpensTheNextItemPaused() {
+    @Test fun pauseAtEndOfItemsStaysOnTheFinishedItem() {
         engine.pauseAtEndOfItems = true
         start()
         backend.end()
-        assertEquals(1, engine.currentIndex)
-        assertFalse(backend.playing)
+        assertEquals(0, engine.currentIndex)
+        assertEquals(EngineState.Ended, engine.state)
     }
 
     @Test fun nextAndPreviousMoveThroughTheQueue() {

@@ -34,6 +34,8 @@ class QueuedMediaEngine(
     override val currentIndex: Int get() = order.getOrElse(cursor) { 0 }
     override val itemCount: Int get() = items.size
     override val title: String? get() = items.getOrNull(currentIndex)?.title
+    private var lastSize: Pair<Int, Int>? = null
+    override val videoSize: Pair<Int, Int>? get() = lastSize
     override var volume: Float
         get() = backend.volume
         set(v) { backend.volume = v }
@@ -59,7 +61,7 @@ class QueuedMediaEngine(
         backend.callback = object : BackendCallback {
             override fun onPlayingChanged(playing: Boolean) = emit { it.onIsPlayingChanged(playing); it.onEvents() }
             override fun onStateChanged(state: EngineState) = emit { it.onStateChanged(state); it.onEvents() }
-            override fun onVideoSize(width: Int, height: Int) = emit { it.onVideoSizeChanged(width, height) }
+            override fun onVideoSize(width: Int, height: Int) { lastSize = width to height; emit { it.onVideoSizeChanged(width, height) } }
             override fun onTracksChanged() = emit { it.onTracksChanged(); it.onEvents() }
             override fun onCues(lines: List<String>) = emit { it.onCues(lines) }
             override fun onEnded() = post { advanceAfterEnd() }
@@ -146,15 +148,13 @@ class QueuedMediaEngine(
     private fun advanceAfterEnd() {
         when {
             repeatMode == RepeatMode.One -> { backend.seekTo(0, fast = false); backend.play() }
-            cursor < order.lastIndex || repeatMode == RepeatMode.All -> {
-                if (pauseAtEndOfItems) playWhenReady = false
-                moveTo((cursor + 1) % order.size, 0)
-            }
+            !pauseAtEndOfItems && (cursor < order.lastIndex || repeatMode == RepeatMode.All) -> moveTo((cursor + 1) % order.size, 0)
             else -> { ended = true; emit { it.onStateChanged(EngineState.Ended); it.onIsPlayingChanged(false); it.onEvents() } }
         }
     }
 
     private fun closeCurrent() {
+        lastSize = null
         if (opened) backend.stop()
         opened = false
         ended = false

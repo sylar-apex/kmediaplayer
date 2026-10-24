@@ -36,6 +36,7 @@ object PlayerKeys : SettingRegistry() {
     val defaultSpeed = r(IntSetting("default_playback_speed", "Default playback speed", 100, 25..400, unit = "%"))
     val rememberSelections = r(BoolSetting("remember_selections", "Remember selections", true, "Remember selections for each file such as choice of audio track, subtitle track, decoder…"))
     val backToList = r(BoolSetting("back_to_list", "Back to list", false, "Return to the list after playback is completed."))
+    val autoPlayNext = r(BoolSetting("auto_play_next", "Play next automatically", false, "Start the next video when one finishes. Off: stop at the end until you press play or next."))
     val seekPreviews = r(BoolSetting("seek_previews", "Preview while seeking", false, "Display preview image while changing playback position."))
     val fastSeek = r(BoolSetting("fast_seek", "Fast seeking", true, "Seek to nearest key-frame position instead of exact position."))
     val playAlone = r(BoolSetting("audio_focus", "Play alone", true, "Stop other players while playing back videos or audios."))
