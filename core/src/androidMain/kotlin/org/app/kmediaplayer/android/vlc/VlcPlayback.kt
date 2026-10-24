@@ -21,6 +21,7 @@ internal interface VlcCallback {
     fun onStateChanged(state: EngineState)
     fun onVideoSize(width: Int, height: Int)
     fun onTracksChanged()
+    fun onBufferProgress(percent: Int)
     fun onEnded()
     fun onError()
 }
@@ -232,7 +233,10 @@ internal class VlcPlayback(private val context: Context, private val callback: V
 
     private fun onEvent(event: MediaPlayer.Event) {
         when (event.type) {
-            MediaPlayer.Event.Buffering -> if (event.buffering < 100f) setState(EngineState.Buffering) else { setState(EngineState.Ready); reportSize() }
+            MediaPlayer.Event.Buffering -> {
+                callback.onBufferProgress(event.buffering.toInt().coerceIn(0, 100))
+                if (event.buffering < 100f) setState(EngineState.Buffering) else { setState(EngineState.Ready); reportSize() }
+            }
             MediaPlayer.Event.Playing -> { setState(EngineState.Ready); callback.onPlayingChanged(true); reportSize() }
             MediaPlayer.Event.Paused -> { setState(EngineState.Ready); callback.onPlayingChanged(false) }
             MediaPlayer.Event.Stopped -> callback.onPlayingChanged(false)

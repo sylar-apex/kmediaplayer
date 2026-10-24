@@ -195,7 +195,10 @@ class VlcjBackend(private val factory: MediaPlayerFactory) : PlaybackBackend {
 
     /** libVLC event thread: only record state and forward; never call back into libVLC here. */
     private inner class Events : MediaPlayerEventAdapter() {
-        override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) = setState(if (newCache < 100f) EngineState.Buffering else EngineState.Ready)
+        override fun buffering(mediaPlayer: MediaPlayer, newCache: Float) {
+            callback?.onBufferProgress(newCache.toInt().coerceIn(0, 100))
+            setState(if (newCache < 100f) EngineState.Buffering else EngineState.Ready)
+        }
         override fun playing(mediaPlayer: MediaPlayer) {
             setState(EngineState.Ready)
             callback?.onPlayingChanged(true)

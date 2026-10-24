@@ -61,6 +61,7 @@ class QueuedMediaEngine(
         backend.callback = object : BackendCallback {
             override fun onPlayingChanged(playing: Boolean) = emit { it.onIsPlayingChanged(playing); it.onEvents() }
             override fun onStateChanged(state: EngineState) = emit { it.onStateChanged(state); it.onEvents() }
+            override fun onBufferProgress(percent: Int) = emit { it.onBufferProgress(percent) }
             override fun onVideoSize(width: Int, height: Int) { lastSize = width to height; emit { it.onVideoSizeChanged(width, height) } }
             override fun onTracksChanged() = emit { it.onTracksChanged(); it.onEvents() }
             override fun onCues(lines: List<String>) = emit { it.onCues(lines) }

@@ -34,6 +34,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.media3.session.MediaSession
 import org.app.kmediaplayer.KMediaPlayer
 import org.app.kmediaplayer.PendingPlayback
@@ -79,6 +80,10 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
         if (Build.VERSION.SDK_INT >= 28) window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
         val engine = KMediaPlayer.engine
         state = VideoPlayerState(engine, lifecycleScope)
+        // The picture size can also come from a stream's poster before the engine reports it.
+        lifecycleScope.launch {
+            androidx.compose.runtime.snapshotFlow { state.videoW to state.videoH }.collect { if (state.landscape == null) applyOrientation() }
+        }
         if (!handleIntent(intent)) { finish(); return }
         session = runCatching { MediaSession.Builder(this, HybridEngine.sessionPlayer).setId("video").build() }.getOrNull()
         engine.addListener(windowListener)
@@ -173,6 +178,9 @@ open class KMediaPlayerActivity : ComponentActivity(), PlayerWindow {
 
     override fun applyOrientation() {
         val forced = state.landscape
+        // Video orientation with the size not known yet (a stream that hasn't reported it): stay as the screen is
+        // rather than guess landscape and turn back a moment later.
+        if (forced == null && state.videoW <= 0 && OrientationMode.valueOf(settings[PlayerKeys.orientation]) == OrientationMode.Video) return
         requestedOrientation = when {
             forced == true -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             forced == false -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT

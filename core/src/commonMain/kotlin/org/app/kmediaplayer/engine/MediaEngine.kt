@@ -55,6 +55,8 @@ interface EngineListener {
     fun onVideoSizeChanged(width: Int, height: Int) {}
     fun onTracksChanged() {}
     fun onCues(lines: List<String>) {}
+    /** How full the buffer is while it refills after a start or a seek, 0..100; engines that can't tell never call it. */
+    fun onBufferProgress(percent: Int) {}
     fun onError(error: EngineError) {}
     fun onShuffleChanged(enabled: Boolean) {}
     fun onRepeatChanged(mode: RepeatMode) {}

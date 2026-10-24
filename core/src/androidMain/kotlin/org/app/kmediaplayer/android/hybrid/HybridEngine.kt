@@ -162,6 +162,7 @@ object HybridEngine : MediaEngine {
         override fun onStateChanged(state: EngineState) = dispatch { it.onStateChanged(state); it.onEvents() }.also { refreshSession() }
         override fun onVideoSize(width: Int, height: Int) { vlcSize = width to height; dispatch { it.onVideoSizeChanged(width, height) } }
         override fun onTracksChanged() = dispatch { it.onTracksChanged() }
+        override fun onBufferProgress(percent: Int) = dispatch { it.onBufferProgress(percent) }
         override fun onEnded() = onDetourEnded()
         override fun onError() = Log.w(TAG, "libVLC error").let { dispatch { it.onError(EngineError("ERROR_CODE_DECODING_FORMAT_UNSUPPORTED")) } }
     }

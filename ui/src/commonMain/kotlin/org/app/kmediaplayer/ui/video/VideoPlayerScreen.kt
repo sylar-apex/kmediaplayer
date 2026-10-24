@@ -1,5 +1,6 @@
 package org.app.kmediaplayer.ui.video
 
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.draw.clip
@@ -238,13 +239,21 @@ private fun VideoPlayerContent(window: PlayerWindow) {
             },
         )
 
+        // A shared video's frame, softened, while the stream starts, instead of a black screen.
+        st.poster?.let { url ->
+            coil3.compose.AsyncImage(url, null,
+                (if (st.videoW > 0) Modifier.align(Alignment.Center).requiredSize(vw, vh) else Modifier.fillMaxSize()).blur(14.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                onSuccess = { st.adoptPosterSize(it.result.image.width, it.result.image.height) })
+        }
+
         if (st.nightMode) Box(Modifier.fillMaxSize().background(Color(0x99000000)))
 
         SubtitleLayer(st, Modifier.align(Alignment.BottomCenter), fitted, ch, if (window.inPip) 0.4f else 1f)
 
         GestureLayer(window, cw, ch)
 
-        if (st.buffering && s[PlayerKeys.loadingCircle]) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+        if (st.buffering && s[PlayerKeys.loadingCircle]) BufferingRing(st.bufferPercent, Modifier.align(Alignment.Center))
 
         if (window.inPip) return@BoxWithConstraints
 
@@ -864,5 +873,16 @@ private fun onShortcut(window: PlayerWindow, sc: Shortcut) {
         Shortcut.Screenshot -> window.screenshot()
         Shortcut.BackgroundPlay -> { st.backgroundPlay = !st.backgroundPlay; st.toast = if (st.backgroundPlay) "Background play on" else "Background play off" }
         Shortcut.Rotation -> window.rotate()
+    }
+}
+
+/** The loading circle; once the engine says how full its buffer is, a ring that fills with the percent inside. */
+@Composable
+private fun BufferingRing(percent: Int?, modifier: Modifier) {
+    if (percent == null) { CircularProgressIndicator(modifier, color = Color.White); return }
+    val shown by androidx.compose.animation.core.animateFloatAsState(percent / 100f, label = "buffer")
+    Box(modifier.size(56.dp).background(Color(0x66000000), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator({ shown }, Modifier.size(50.dp), color = Color.White, strokeWidth = 3.dp, trackColor = Color(0x33FFFFFF))
+        Text("$percent%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }

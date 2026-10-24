@@ -35,6 +35,7 @@ class FallbackBackend(
     private fun relay(source: PlaybackBackend) = object : BackendCallback {
         override fun onPlayingChanged(playing: Boolean) { if (active === source) callback?.onPlayingChanged(playing) }
         override fun onStateChanged(state: EngineState) { if (active === source) callback?.onStateChanged(state) }
+        override fun onBufferProgress(percent: Int) { if (active === source) callback?.onBufferProgress(percent) }
         override fun onVideoSize(width: Int, height: Int) { if (active === source) callback?.onVideoSize(width, height) }
         override fun onTracksChanged() { if (active === source) callback?.onTracksChanged() }
         override fun onCues(lines: List<String>) { if (active === source) callback?.onCues(lines) }

@@ -43,6 +43,10 @@ enum class Panel { None, Overflow, Audio, Subtitle, Decoder, Speed, Equalizer, S
 /** Everything the video screen shows and does, driven by one [MediaEngine]. */
 /** How far before the end a finished video is shown when it stops instead of going on to the next. */
 private const val END_MARGIN_MS = 150L
+/** Least time between seeks sent to the engine; newer targets in between replace older ones. */
+private const val SEEK_GAP_MS = 120L
+/** How long the bar may show a seek target the engine hasn't reached yet. */
+private const val SEEK_HOLD_MS = 4000L
 
 class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     private val settings = KMediaPlayer.settings
@@ -54,6 +58,22 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
     var isPlaying by mutableStateOf(false)
     var buffering by mutableStateOf(false)
     var position by mutableLongStateOf(0L)
+    /** Buffer fill (0..99) while the engine refills after a start or seek; null otherwise. */
+    var bufferPercent by mutableStateOf<Int?>(null)
+    /** Where the latest seek is going; the bar stays there until playback reaches it. */
+    private var seekTarget: Long? = null
+    private var seekHoldUntil = 0L
+    private var seekJob: Job? = null
+    private var lastSeekSentAt = 0L
+    /** The current item has shown real frames; until then its poster stands in. */
+    var started by mutableStateOf(false)
+    val poster: String? get() = current?.posterUrl?.takeIf { !started }
+
+    /** The poster is a frame of the video, so its proportions stand in until the engine reports the real size. */
+    fun adoptPosterSize(width: Int, height: Int) {
+        if (videoW > 0 || width <= 0 || height <= 0) return
+        videoW = width; videoH = height
+    }
     var duration by mutableLongStateOf(0L)
     var videoW by mutableIntStateOf(0)
     var videoH by mutableIntStateOf(0)
@@ -132,6 +152,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing; scheduleHide() }
         override fun onStateChanged(state: EngineState) {
             buffering = state == EngineState.Buffering
+            if (!buffering) bufferPercent = null
             duration = engine.duration
             if (state == EngineState.Ready) { checkResume(); if (videoW <= 0) adoptEngineSize() }
             if (state == EngineState.Ended) onEnded()
@@ -163,6 +184,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         }
         override fun onTracksChanged() { readTracks(); restoreTracks(); if (videoW <= 0) adoptEngineSize() }
         override fun onCues(lines: List<String>) { embeddedCues = lines }
+        override fun onBufferProgress(percent: Int) { bufferPercent = percent.takeIf { it in 0..99 } }
         override fun onError(error: EngineError) {
             if (settings[PlayerKeys.suppressError] && engine.hasNext()) { movedByUser = true; engine.seekToNext(); engine.prepare(); engine.play(); return }
             this@VideoPlayerState.error = error
@@ -230,7 +252,11 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         ticker = scope.launch {
             var n = 0
             while (isActive) {
-                position = engine.position
+                // Right after a seek the engine still reports where it was; hold the bar on the target until it gets there.
+                val target = seekTarget
+                position = if (target != null && kotlin.math.abs(engine.position - target) > 1500 && nowMs() < seekHoldUntil) target
+                    else { seekTarget = null; engine.position }
+                if (!started && isPlaying && position > 200) started = true
                 ab.loopTarget(position)?.let { engine.seekTo(it) }
                 sleepEndAt?.let { end ->
                     if (nowMs() >= end) {
@@ -259,6 +285,7 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
 
     private fun onItemChanged() {
         val f = current ?: return
+        started = false
         title = f.title
         // Size the picture from the file until the engine reports the decoded size; some streams never report it,
         // and without a size every zoom mode would fill the screen. An unknown size (shared files) keeps what the
@@ -337,13 +364,28 @@ class VideoPlayerState(val engine: MediaEngine, val scope: CoroutineScope) {
         scheduleHide()
     }
 
-    fun seekBy(deltaMs: Long) { seekTo(engine.position + deltaMs) }
+    /** Relative to where the last seek is going, so quick repeated skips add up. */
+    fun seekBy(deltaMs: Long) { seekTo((seekTarget ?: engine.position) + deltaMs) }
 
+    /**
+     * Seeks to [ms]. Quick successive seeks are merged: only the newest target goes to the engine (at most every
+     * [SEEK_GAP_MS]), so it never works through positions already left behind.
+     */
     fun seekTo(ms: Long) {
         stoppedAtEnd = false
-        engine.seekTo(ms.coerceIn(0, engine.duration.takeIf { it > 0 } ?: Long.MAX_VALUE))
-        position = engine.position
-        fadeIn(settings[PlayerKeys.fadeOnSeek])
+        val target = ms.coerceIn(0, engine.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        seekTarget = target
+        seekHoldUntil = nowMs() + SEEK_HOLD_MS
+        position = target
+        if (seekJob?.isActive == true) return
+        seekJob = scope.launch {
+            val wait = SEEK_GAP_MS - (nowMs() - lastSeekSentAt)
+            if (wait > 0) delay(wait)
+            val latest = seekTarget ?: return@launch
+            lastSeekSentAt = nowMs()
+            engine.seekTo(latest)
+            fadeIn(settings[PlayerKeys.fadeOnSeek])
+        }
     }
 
     fun next() {

@@ -18,6 +18,8 @@ data class MediaFile(
     val album: String = "",
     /** Network extras for streams (separate audio track, User-Agent); none for local files. */
     val extras: StreamExtras = StreamExtras.None,
+    /** A small picture of the video (a frame), shown blurred while a stream starts; null when there is none. */
+    val posterUrl: String? = null,
 ) {
     val folderPath: String get() = path.substringBeforeLast('/', "")
     val folderName: String get() = folderPath.substringAfterLast('/')

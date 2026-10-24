@@ -9,6 +9,8 @@ interface BackendCallback {
     fun onVideoSize(width: Int, height: Int)
     fun onTracksChanged()
     fun onCues(lines: List<String>) {}
+    /** Buffer fill while refilling, 0..100. */
+    fun onBufferProgress(percent: Int) {}
     fun onEnded()
     fun onError(codeName: String)
 }
